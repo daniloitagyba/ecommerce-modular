@@ -1,5 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
+using ECommerce.API.BackgroundJobs;
+using ECommerce.Modules.Ordering.Infrastructure;
+using MassTransit;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Quartz;
 
 namespace ECommerce.Tests.EndToEnd;
 
@@ -30,7 +36,6 @@ public class BillingEndpointTests(ECommerceWebAppFactory factory) : IClassFixtur
     [Fact]
     public async Task PlaceOrder_ShouldAsyncCreatePaymentAndInvoice()
     {
-        // Place an order — outbox message is saved in the same transaction
         var orderResponse = await _client.PostAsJsonAsync("/api/orders", new
         {
             customerEmail = "billing@test.com",
@@ -42,7 +47,6 @@ public class BillingEndpointTests(ECommerceWebAppFactory factory) : IClassFixtur
         var orderBody = await orderResponse.Content.ReadFromJsonAsync<IdResponse>();
         var orderId = orderBody!.Id;
 
-        // Wait for outbox processing (Quartz job runs every 1s in tests)
         var payments = await PollForResultAsync<List<PaymentResponse>>(
             $"/api/billing/payments/{orderId}", r => r?.Count > 0);
 
@@ -104,10 +108,17 @@ public class BillingEndpointTests(ECommerceWebAppFactory factory) : IClassFixtur
         invoices.Should().ContainSingle().Which.Amount.Should().Be(1000m);
     }
 
+    /// <summary>
+    /// Polls an endpoint for a condition, manually triggering the outbox job
+    /// on each iteration to avoid depending on Quartz scheduler timing
+    /// (which can be unreliable under parallel test execution).
+    /// </summary>
     private async Task<T> PollForResultAsync<T>(string url, Func<T?, bool> condition, int maxRetries = 15, int delayMs = 500)
     {
         for (var i = 0; i < maxRetries; i++)
         {
+            await TriggerOutboxProcessingAsync();
+
             var response = await _client.GetAsync(url);
             var result = await response.Content.ReadFromJsonAsync<T>();
             if (condition(result))
@@ -115,11 +126,47 @@ public class BillingEndpointTests(ECommerceWebAppFactory factory) : IClassFixtur
             await Task.Delay(delayMs);
         }
 
-        // Final attempt — return whatever we get
         var finalResponse = await _client.GetAsync(url);
         return (await finalResponse.Content.ReadFromJsonAsync<T>())!;
+    }
+
+    private async Task TriggerOutboxProcessingAsync()
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<OrderingDbContext>();
+        var bus = scope.ServiceProvider.GetRequiredService<IBus>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<ProcessOutboxJob>>();
+        var job = new ProcessOutboxJob(dbContext, bus, logger);
+        var jobContext = new FakeJobExecutionContext();
+        await job.Execute(jobContext);
     }
 }
 
 public record PaymentResponse(Guid Id, Guid OrderId, decimal Amount, string Status, DateTime CreatedAt, DateTime? CompletedAt);
 public record InvoiceResponse(Guid Id, string InvoiceNumber, Guid OrderId, decimal Amount, string CustomerEmail, DateTime IssuedAt);
+
+/// <summary>
+/// Minimal IJobExecutionContext for manually triggering the outbox job in tests.
+/// </summary>
+internal sealed class FakeJobExecutionContext : IJobExecutionContext
+{
+    public IScheduler Scheduler => null!;
+    public ITrigger Trigger => null!;
+    public ICalendar? Calendar => null;
+    public bool Recovering => false;
+    public TriggerKey RecoveringTriggerKey => null!;
+    public int RefireCount => 0;
+    public JobDataMap MergedJobDataMap => new();
+    public IJobDetail JobDetail => null!;
+    public IJob JobInstance => null!;
+    public DateTimeOffset FireTimeUtc => DateTimeOffset.UtcNow;
+    public DateTimeOffset? ScheduledFireTimeUtc => null;
+    public DateTimeOffset? PreviousFireTimeUtc => null;
+    public DateTimeOffset? NextFireTimeUtc => null;
+    public string FireInstanceId => "test";
+    public object? Result { get; set; }
+    public TimeSpan JobRunTime => TimeSpan.Zero;
+    public CancellationToken CancellationToken => CancellationToken.None;
+    public object? Get(object key) => null;
+    public void Put(object key, object objectValue) { }
+}
