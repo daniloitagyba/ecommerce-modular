@@ -60,12 +60,6 @@ app.UseExceptionHandler(errorApp =>
                 .ToArray();
             await context.Response.WriteAsJsonAsync(new { errors });
         }
-        else if (exception is KeyNotFoundException)
-        {
-            context.Response.StatusCode = 404;
-            context.Response.ContentType = "application/json";
-            await context.Response.WriteAsJsonAsync(new { error = exception.Message });
-        }
         else
         {
             context.Response.StatusCode = 500;
@@ -84,3 +78,6 @@ app.MapBillingEndpoints();
 await app.InitializeDatabaseAsync();
 
 app.Run();
+
+// Make the implicit Program class accessible to the test project
+public partial class Program;

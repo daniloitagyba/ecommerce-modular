@@ -1,11 +1,13 @@
 using ECommerce.Modules.Billing.Domain;
+using ECommerce.Shared.Domain;
 using ECommerce.Shared.Infrastructure;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace ECommerce.Modules.Billing.Infrastructure;
 
-public sealed class BillingDbContext(DbContextOptions<BillingDbContext> options, IPublisher publisher) : DbContext(options)
+public sealed class BillingDbContext(DbContextOptions<BillingDbContext> options, IPublisher publisher)
+    : DbContext(options), IBillingUnitOfWork
 {
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<Invoice> Invoices => Set<Invoice>();

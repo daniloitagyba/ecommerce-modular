@@ -1,11 +1,13 @@
 using ECommerce.Modules.Catalog.Domain;
+using ECommerce.Shared.Domain;
 using ECommerce.Shared.Infrastructure;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace ECommerce.Modules.Catalog.Infrastructure;
 
-public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options, IPublisher publisher) : DbContext(options)
+public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options, IPublisher publisher)
+    : DbContext(options), ICatalogUnitOfWork
 {
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Category> Categories => Set<Category>();

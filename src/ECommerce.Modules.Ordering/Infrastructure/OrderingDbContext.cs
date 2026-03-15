@@ -1,11 +1,13 @@
 using ECommerce.Modules.Ordering.Domain;
+using ECommerce.Shared.Domain;
 using ECommerce.Shared.Infrastructure;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace ECommerce.Modules.Ordering.Infrastructure;
 
-public sealed class OrderingDbContext(DbContextOptions<OrderingDbContext> options, IPublisher publisher) : DbContext(options)
+public sealed class OrderingDbContext(DbContextOptions<OrderingDbContext> options, IPublisher publisher)
+    : DbContext(options), IOrderingUnitOfWork
 {
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderLine> OrderLines => Set<OrderLine>();

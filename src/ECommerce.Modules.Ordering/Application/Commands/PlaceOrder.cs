@@ -1,11 +1,11 @@
 using ECommerce.Modules.Ordering.Domain;
-using ECommerce.Modules.Ordering.Infrastructure;
+using ECommerce.Shared.Domain;
 using FluentValidation;
 using MediatR;
 
 namespace ECommerce.Modules.Ordering.Application.Commands;
 
-public sealed record PlaceOrderCommand(string CustomerEmail, List<OrderLineDto> Lines) : IRequest<Guid>;
+public sealed record PlaceOrderCommand(string CustomerEmail, List<OrderLineDto> Lines) : IRequest<Result<Guid>>;
 
 public sealed record OrderLineDto(Guid ProductId, string ProductName, decimal UnitPrice, int Quantity);
 
@@ -25,16 +25,21 @@ public sealed class PlaceOrderValidator : AbstractValidator<PlaceOrderCommand>
     }
 }
 
-public sealed class PlaceOrderHandler(OrderingDbContext db) : IRequestHandler<PlaceOrderCommand, Guid>
+public sealed class PlaceOrderHandler(IOrderRepository repository, IOrderingUnitOfWork unitOfWork)
+    : IRequestHandler<PlaceOrderCommand, Result<Guid>>
 {
-    public async Task<Guid> Handle(PlaceOrderCommand request, CancellationToken ct)
+    public async Task<Result<Guid>> Handle(PlaceOrderCommand request, CancellationToken ct)
     {
         var lines = request.Lines.Select(l =>
             OrderLine.Create(l.ProductId, l.ProductName, l.UnitPrice, l.Quantity));
 
-        var order = Order.Create(request.CustomerEmail, lines);
-        db.Orders.Add(order);
-        await db.SaveChangesAsync(ct);
-        return order.Id;
+        var result = Order.Create(request.CustomerEmail, lines);
+        if (result.IsFailure)
+            return Result<Guid>.Failure(result.Error);
+
+        repository.Add(result.Value!);
+        await unitOfWork.SaveChangesAsync(ct);
+
+        return Result<Guid>.Success(result.Value!.Id);
     }
 }

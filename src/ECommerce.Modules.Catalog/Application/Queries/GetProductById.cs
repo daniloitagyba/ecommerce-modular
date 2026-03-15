@@ -1,17 +1,21 @@
-using ECommerce.Modules.Catalog.Infrastructure;
+using ECommerce.Modules.Catalog.Domain;
+using ECommerce.Shared.Domain;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 
 namespace ECommerce.Modules.Catalog.Application.Queries;
 
-public sealed record GetProductByIdQuery(Guid Id) : IRequest<ProductDto?>;
+public sealed record GetProductByIdQuery(Guid Id) : IRequest<Result<ProductDto>>;
 
-public sealed class GetProductByIdHandler(CatalogDbContext db) : IRequestHandler<GetProductByIdQuery, ProductDto?>
+public sealed class GetProductByIdHandler(IProductRepository repository)
+    : IRequestHandler<GetProductByIdQuery, Result<ProductDto>>
 {
-    public async Task<ProductDto?> Handle(GetProductByIdQuery request, CancellationToken ct) =>
-        await db.Products
-            .Include(p => p.Category)
-            .Where(p => p.Id == request.Id)
-            .Select(p => new ProductDto(p.Id, p.Name, p.Sku, p.Price, p.StockQuantity, p.Category.Name))
-            .FirstOrDefaultAsync(ct);
+    public async Task<Result<ProductDto>> Handle(GetProductByIdQuery request, CancellationToken ct)
+    {
+        var product = await repository.GetByIdWithCategoryAsync(request.Id, ct);
+        if (product is null)
+            return Result<ProductDto>.Failure(ProductErrors.NotFound);
+
+        return Result<ProductDto>.Success(
+            new ProductDto(product.Id, product.Name, product.Sku, product.Price, product.StockQuantity, product.Category.Name));
+    }
 }

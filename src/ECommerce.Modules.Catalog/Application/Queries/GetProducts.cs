@@ -1,18 +1,18 @@
-using ECommerce.Modules.Catalog.Infrastructure;
+using ECommerce.Modules.Catalog.Domain;
+using ECommerce.Shared.Application;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 
 namespace ECommerce.Modules.Catalog.Application.Queries;
 
-public sealed record GetProductsQuery : IRequest<List<ProductDto>>;
+public sealed record GetProductsQuery(PagedRequest Paging) : IRequest<PagedResult<ProductDto>>;
 
 public sealed record ProductDto(Guid Id, string Name, string Sku, decimal Price, int StockQuantity, string CategoryName);
 
-public sealed class GetProductsHandler(CatalogDbContext db) : IRequestHandler<GetProductsQuery, List<ProductDto>>
+public sealed class GetProductsHandler(IProductRepository repository)
+    : IRequestHandler<GetProductsQuery, PagedResult<ProductDto>>
 {
-    public async Task<List<ProductDto>> Handle(GetProductsQuery request, CancellationToken ct) =>
-        await db.Products
-            .Include(p => p.Category)
+    public async Task<PagedResult<ProductDto>> Handle(GetProductsQuery request, CancellationToken ct) =>
+        await repository.QueryWithCategory()
             .Select(p => new ProductDto(p.Id, p.Name, p.Sku, p.Price, p.StockQuantity, p.Category.Name))
-            .ToListAsync(ct);
+            .ToPagedResultAsync(request.Paging, ct);
 }

@@ -1,11 +1,11 @@
 using ECommerce.Modules.Catalog.Domain;
-using ECommerce.Modules.Catalog.Infrastructure;
+using ECommerce.Shared.Domain;
 using FluentValidation;
 using MediatR;
 
 namespace ECommerce.Modules.Catalog.Application.Commands;
 
-public sealed record CreateCategoryCommand(string Name, string Description) : IRequest<Guid>;
+public sealed record CreateCategoryCommand(string Name, string Description) : IRequest<Result<Guid>>;
 
 public sealed class CreateCategoryValidator : AbstractValidator<CreateCategoryCommand>
 {
@@ -16,13 +16,18 @@ public sealed class CreateCategoryValidator : AbstractValidator<CreateCategoryCo
     }
 }
 
-public sealed class CreateCategoryHandler(CatalogDbContext db) : IRequestHandler<CreateCategoryCommand, Guid>
+public sealed class CreateCategoryHandler(ICategoryRepository repository, ICatalogUnitOfWork unitOfWork)
+    : IRequestHandler<CreateCategoryCommand, Result<Guid>>
 {
-    public async Task<Guid> Handle(CreateCategoryCommand request, CancellationToken ct)
+    public async Task<Result<Guid>> Handle(CreateCategoryCommand request, CancellationToken ct)
     {
-        var category = Category.Create(request.Name, request.Description);
-        db.Categories.Add(category);
-        await db.SaveChangesAsync(ct);
-        return category.Id;
+        var result = Category.Create(request.Name, request.Description);
+        if (result.IsFailure)
+            return Result<Guid>.Failure(result.Error);
+
+        repository.Add(result.Value!);
+        await unitOfWork.SaveChangesAsync(ct);
+
+        return Result<Guid>.Success(result.Value!.Id);
     }
 }

@@ -1,4 +1,5 @@
-using ECommerce.Modules.Billing.Infrastructure;
+using ECommerce.Modules.Billing.Domain;
+using ECommerce.Shared.Application;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,11 +9,11 @@ public sealed record GetInvoicesByOrderQuery(Guid OrderId) : IRequest<List<Invoi
 
 public sealed record InvoiceDto(Guid Id, string InvoiceNumber, Guid OrderId, decimal Amount, string CustomerEmail, DateTime IssuedAt);
 
-public sealed class GetInvoicesByOrderHandler(BillingDbContext db) : IRequestHandler<GetInvoicesByOrderQuery, List<InvoiceDto>>
+public sealed class GetInvoicesByOrderHandler(IInvoiceRepository repository)
+    : IRequestHandler<GetInvoicesByOrderQuery, List<InvoiceDto>>
 {
     public async Task<List<InvoiceDto>> Handle(GetInvoicesByOrderQuery request, CancellationToken ct) =>
-        await db.Invoices
-            .Where(i => i.OrderId == request.OrderId)
+        await repository.QueryByOrderId(request.OrderId)
             .Select(i => new InvoiceDto(i.Id, i.InvoiceNumber, i.OrderId, i.Amount, i.CustomerEmail, i.IssuedAt))
             .ToListAsync(ct);
 }

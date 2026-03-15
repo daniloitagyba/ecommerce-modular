@@ -1,11 +1,11 @@
-using ECommerce.Modules.Catalog.Infrastructure;
+using ECommerce.Modules.Catalog.Domain;
+using ECommerce.Shared.Domain;
 using FluentValidation;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 
 namespace ECommerce.Modules.Catalog.Application.Commands;
 
-public sealed record UpdateStockCommand(Guid ProductId, int Quantity) : IRequest;
+public sealed record UpdateStockCommand(Guid ProductId, int Quantity) : IRequest<Result>;
 
 public sealed class UpdateStockValidator : AbstractValidator<UpdateStockCommand>
 {
@@ -15,18 +15,25 @@ public sealed class UpdateStockValidator : AbstractValidator<UpdateStockCommand>
     }
 }
 
-public sealed class UpdateStockHandler(CatalogDbContext db) : IRequestHandler<UpdateStockCommand>
+public sealed class UpdateStockHandler(IProductRepository repository, ICatalogUnitOfWork unitOfWork)
+    : IRequestHandler<UpdateStockCommand, Result>
 {
-    public async Task Handle(UpdateStockCommand request, CancellationToken ct)
+    public async Task<Result> Handle(UpdateStockCommand request, CancellationToken ct)
     {
-        var product = await db.Products.FirstOrDefaultAsync(p => p.Id == request.ProductId, ct)
-            ?? throw new KeyNotFoundException($"Product {request.ProductId} not found.");
+        var product = await repository.GetByIdAsync(request.ProductId, ct);
+        if (product is null)
+            return Result.Failure(ProductErrors.NotFound);
 
         if (request.Quantity > 0)
             product.IncreaseStock(request.Quantity);
         else
-            product.DecreaseStock(Math.Abs(request.Quantity));
+        {
+            var decreaseResult = product.DecreaseStock(Math.Abs(request.Quantity));
+            if (decreaseResult.IsFailure)
+                return decreaseResult;
+        }
 
-        await db.SaveChangesAsync(ct);
+        await unitOfWork.SaveChangesAsync(ct);
+        return Result.Success();
     }
 }

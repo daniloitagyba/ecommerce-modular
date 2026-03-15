@@ -12,12 +12,22 @@ public sealed class Category : Entity
 
     private Category() { }
 
-    public static Category Create(string name, string description) =>
-        new() { Name = name, Description = description };
+    public static Result<Category> Create(string name, string description)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return Result<Category>.Failure(CategoryErrors.EmptyName);
+
+        return Result<Category>.Success(new Category { Name = name, Description = description });
+    }
 
     public void Update(string name, string description)
     {
         Name = name;
         Description = description;
     }
+}
+
+public static class CategoryErrors
+{
+    public static readonly Error EmptyName = new("Category.EmptyName", "Category name cannot be empty.");
 }

@@ -1,11 +1,12 @@
 using ECommerce.Modules.Catalog.Domain;
-using ECommerce.Modules.Catalog.Infrastructure;
+using ECommerce.Shared.Domain;
 using FluentValidation;
 using MediatR;
 
 namespace ECommerce.Modules.Catalog.Application.Commands;
 
-public sealed record CreateProductCommand(string Name, string Sku, decimal Price, int StockQuantity, Guid CategoryId) : IRequest<Guid>;
+public sealed record CreateProductCommand(string Name, string Sku, decimal Price, int StockQuantity, Guid CategoryId)
+    : IRequest<Result<Guid>>;
 
 public sealed class CreateProductValidator : AbstractValidator<CreateProductCommand>
 {
@@ -19,13 +20,18 @@ public sealed class CreateProductValidator : AbstractValidator<CreateProductComm
     }
 }
 
-public sealed class CreateProductHandler(CatalogDbContext db) : IRequestHandler<CreateProductCommand, Guid>
+public sealed class CreateProductHandler(IProductRepository repository, ICatalogUnitOfWork unitOfWork)
+    : IRequestHandler<CreateProductCommand, Result<Guid>>
 {
-    public async Task<Guid> Handle(CreateProductCommand request, CancellationToken ct)
+    public async Task<Result<Guid>> Handle(CreateProductCommand request, CancellationToken ct)
     {
-        var product = Product.Create(request.Name, request.Sku, request.Price, request.StockQuantity, request.CategoryId);
-        db.Products.Add(product);
-        await db.SaveChangesAsync(ct);
-        return product.Id;
+        var result = Product.Create(request.Name, request.Sku, request.Price, request.StockQuantity, request.CategoryId);
+        if (result.IsFailure)
+            return Result<Guid>.Failure(result.Error);
+
+        repository.Add(result.Value!);
+        await unitOfWork.SaveChangesAsync(ct);
+
+        return Result<Guid>.Success(result.Value!.Id);
     }
 }
