@@ -28,9 +28,9 @@ public class BillingEndpointTests(ECommerceWebAppFactory factory) : IClassFixtur
     }
 
     [Fact]
-    public async Task PlaceOrder_ShouldAutomaticallyCreatePaymentAndInvoice()
+    public async Task PlaceOrder_ShouldAsyncCreatePaymentAndInvoice()
     {
-        // Place an order
+        // Place an order — outbox message is saved in the same transaction
         var orderResponse = await _client.PostAsJsonAsync("/api/orders", new
         {
             customerEmail = "billing@test.com",
@@ -42,20 +42,19 @@ public class BillingEndpointTests(ECommerceWebAppFactory factory) : IClassFixtur
         var orderBody = await orderResponse.Content.ReadFromJsonAsync<IdResponse>();
         var orderId = orderBody!.Id;
 
-        // Check payment was created
-        var paymentResponse = await _client.GetAsync($"/api/billing/payments/{orderId}");
-        paymentResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        var payments = await paymentResponse.Content.ReadFromJsonAsync<List<PaymentResponse>>();
+        // Wait for outbox processing (Quartz job runs every 1s in tests)
+        var payments = await PollForResultAsync<List<PaymentResponse>>(
+            $"/api/billing/payments/{orderId}", r => r?.Count > 0);
+
         payments.Should().ContainSingle()
             .Which.Should().Match<PaymentResponse>(p =>
                 p.OrderId == orderId &&
                 p.Amount == 300.0m &&
                 p.Status == "Completed");
 
-        // Check invoice was created
-        var invoiceResponse = await _client.GetAsync($"/api/billing/invoices/{orderId}");
-        invoiceResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        var invoices = await invoiceResponse.Content.ReadFromJsonAsync<List<InvoiceResponse>>();
+        var invoices = await PollForResultAsync<List<InvoiceResponse>>(
+            $"/api/billing/invoices/{orderId}", r => r?.Count > 0);
+
         invoices.Should().ContainSingle()
             .Which.Should().Match<InvoiceResponse>(i =>
                 i.OrderId == orderId &&
@@ -94,15 +93,31 @@ public class BillingEndpointTests(ECommerceWebAppFactory factory) : IClassFixtur
         var getOrder = await _client.GetAsync($"/api/orders/{orderBody!.Id}");
         getOrder.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        // 5. Verify payment
-        var payments = await (await _client.GetAsync($"/api/billing/payments/{orderBody.Id}"))
-            .Content.ReadFromJsonAsync<List<PaymentResponse>>();
+        // 5. Wait for outbox processing, then verify payment
+        var payments = await PollForResultAsync<List<PaymentResponse>>(
+            $"/api/billing/payments/{orderBody.Id}", r => r?.Count > 0);
         payments.Should().ContainSingle().Which.Amount.Should().Be(1000m);
 
         // 6. Verify invoice
-        var invoices = await (await _client.GetAsync($"/api/billing/invoices/{orderBody.Id}"))
-            .Content.ReadFromJsonAsync<List<InvoiceResponse>>();
+        var invoices = await PollForResultAsync<List<InvoiceResponse>>(
+            $"/api/billing/invoices/{orderBody.Id}", r => r?.Count > 0);
         invoices.Should().ContainSingle().Which.Amount.Should().Be(1000m);
+    }
+
+    private async Task<T> PollForResultAsync<T>(string url, Func<T?, bool> condition, int maxRetries = 15, int delayMs = 500)
+    {
+        for (var i = 0; i < maxRetries; i++)
+        {
+            var response = await _client.GetAsync(url);
+            var result = await response.Content.ReadFromJsonAsync<T>();
+            if (condition(result))
+                return result!;
+            await Task.Delay(delayMs);
+        }
+
+        // Final attempt — return whatever we get
+        var finalResponse = await _client.GetAsync(url);
+        return (await finalResponse.Content.ReadFromJsonAsync<T>())!;
     }
 }
 

@@ -12,7 +12,7 @@ src/
 ├── ECommerce.Shared/                 # Kernel compartilhado (Result, Entity, Value Objects, Paginacao)
 ├── ECommerce.Modules.Catalog/        # Gerenciamento de Produtos e Categorias
 ├── ECommerce.Modules.Ordering/       # Criacao e ciclo de vida de Pedidos
-└── ECommerce.Modules.Billing/        # Pagamentos e Faturas (orientado a eventos)
+└── ECommerce.Modules.Billing/        # Pagamentos e Faturas (async via Outbox)
 
 tests/
 ├── ECommerce.Tests.Unit/             # 80 testes unitarios
@@ -42,7 +42,9 @@ Modulo/
 | CQRS / Mediator | MediatR 12 |
 | Validacao | FluentValidation 11 |
 | ORM | Entity Framework Core 10 |
-| Banco de dados | SQLite (dev) — design agnostico de provider |
+| Banco de dados | PostgreSQL (via Npgsql) |
+| Mensageria | MassTransit (transporte InMemory) |
+| Jobs em Background | Quartz.NET |
 | Testes | xUnit, FluentAssertions, NSubstitute |
 | Cobertura | Coverlet + ReportGenerator |
 
@@ -53,7 +55,9 @@ Modulo/
 - **Unit of Work** — escopo por modulo (`ICatalogUnitOfWork`, `IOrderingUnitOfWork`, `IBillingUnitOfWork`)
 - **Value Objects** — `Money`, `Email`, `Sku` com validacao via factory method
 - **Domain Events** — `IDomainEvent` despachados apos `SaveChanges`
-- **Integration Events** — comunicacao entre modulos via `OrderCreatedIntegrationEvent`
+- **Transactional Outbox Pattern** — eventos de integracao salvos na tabela `OutboxMessages` na mesma transacao ACID
+- **MassTransit Consumers** — comunicacao assincrona entre modulos via `OrderCreatedIntegrationEvent`
+- **Quartz.NET Background Job** — `ProcessOutboxJob` le o outbox e publica no bus do MassTransit
 - **CQRS** — Commands (escrita) e Queries (leitura) separados atraves do MediatR
 - **Paginacao** — `PagedRequest` / `PagedResult<T>` com extensao para `IQueryable`
 - **Pipeline de Validacao** — `ValidationBehavior<TRequest, TResponse>` como behavior do MediatR
@@ -63,6 +67,7 @@ Modulo/
 ## Pre-requisitos
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- [PostgreSQL](https://www.postgresql.org/download/) (rodando em localhost:5432)
 
 ## Como Executar
 
@@ -80,7 +85,7 @@ dotnet run --project src/ECommerce.API
 
 A API inicia em `http://localhost:5225` (veja `Properties/launchSettings.json`).
 
-O banco SQLite (`ecommerce.db`) e criado automaticamente na primeira execucao.
+O banco PostgreSQL e criado automaticamente na primeira execucao. Conexao padrao: `Host=localhost;Port=5432;Database=ecommerce;Username=postgres;Password=postgres` (veja `appsettings.json`).
 
 ## Endpoints da API
 
@@ -109,7 +114,7 @@ O banco SQLite (`ecommerce.db`) e criado automaticamente na primeira execucao.
 | `GET` | `/api/billing/payments/{orderId}` | Buscar pagamentos de um pedido |
 | `GET` | `/api/billing/invoices/{orderId}` | Buscar faturas de um pedido |
 
-> Pagamentos e faturas sao criados automaticamente quando um pedido e realizado, via event handlers de dominio.
+> Pagamentos e faturas sao criados **assincronamente** quando um pedido e realizado, via Transactional Outbox Pattern + Quartz.NET + MassTransit.
 
 ### Paginacao
 
@@ -179,11 +184,25 @@ reportgenerator -reports:"coverage/*/coverage.cobertura.xml" -targetdir:coverage
 
 Os modulos de negocio atingem **97-100%** de cobertura de metodos.
 
+## Transactional Outbox Pattern
+
+O fluxo de faturamento usa o **Transactional Outbox Pattern** para processamento assincrono confiavel:
+
+```
+1. PlaceOrder handler salva Order + OutboxMessage na MESMA transacao (ACID)
+2. Quartz.NET job (ProcessOutboxJob) le OutboxMessages nao processadas a cada 10s
+3. Job deserializa o evento e publica no bus InMemory do MassTransit
+4. MassTransit consumer (OrderCreatedConsumer) cria Payment + Invoice no modulo Billing
+5. OutboxMessage e marcada como processada
+```
+
+Isso garante que nenhum evento de faturamento e perdido mesmo se a aplicacao falhar apos salvar o pedido.
+
 ## Isolamento de Dados
 
-Cada modulo possui seu proprio `DbContext` com schema dedicado (`catalog`, `ordering`, `billing`). No modo de desenvolvimento com SQLite, schemas sao ignorados, mas o design esta preparado para isolamento de schema com PostgreSQL.
+Cada modulo possui seu proprio `DbContext` com schema dedicado no PostgreSQL (`catalog`, `ordering`, `billing`).
 
-A comunicacao entre modulos acontece exclusivamente atraves de integration events no Shared kernel — modulos nunca referenciam tipos internos de outros modulos.
+A comunicacao entre modulos acontece exclusivamente atraves do outbox + MassTransit — modulos nunca referenciam tipos internos de outros modulos.
 
 ## Estrutura do Projeto
 
@@ -194,9 +213,11 @@ ecommerce-modular/
 ├── src/
 │   ├── ECommerce.API/                # Aplicacao host
 │   │   ├── Program.cs               # Composition root
-│   │   └── DatabaseInitializer.cs   # EnsureCreated para multi-context SQLite
+│   │   ├── DatabaseInitializer.cs   # EnsureCreated para multi-context PostgreSQL
+│   │   └── BackgroundJobs/
+│   │       └── ProcessOutboxJob.cs  # Quartz job: outbox → MassTransit
 │   ├── ECommerce.Shared/            # Kernel compartilhado
-│   │   ├── Domain/                  # Entity, Result, Error, IDomainEvent, IRepository
+│   │   ├── Domain/                  # Entity, Result, Error, IDomainEvent, IRepository, OutboxMessage
 │   │   │   └── ValueObjects/        # Money, Email, Sku
 │   │   ├── Application/             # ValidationBehavior, Paginacao
 │   │   └── Infrastructure/          # Repository<T>, DomainEventDispatcher

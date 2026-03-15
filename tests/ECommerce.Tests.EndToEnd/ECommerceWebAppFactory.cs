@@ -7,6 +7,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ECommerce.Tests.EndToEnd;
@@ -22,25 +23,37 @@ public class ECommerceWebAppFactory : WebApplicationFactory<Program>, IAsyncLife
 
         builder.UseEnvironment("Testing");
 
+        // Override outbox interval to 1 second for fast E2E test feedback
+        builder.ConfigureAppConfiguration((_, config) =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Outbox:IntervalSeconds"] = "1"
+            });
+        });
+
         builder.ConfigureServices(services =>
         {
-            // Remove existing DbContext registrations
-            RemoveService<DbContextOptions<CatalogDbContext>>(services);
-            RemoveService<DbContextOptions<OrderingDbContext>>(services);
-            RemoveService<DbContextOptions<BillingDbContext>>(services);
+            // Remove ALL EF Core DbContext and provider registrations
+            var descriptorsToRemove = services
+                .Where(d =>
+                    d.ServiceType.FullName?.Contains("DbContextOptions") == true ||
+                    d.ServiceType.FullName?.Contains("EntityFrameworkCore") == true ||
+                    d.ImplementationType?.FullName?.Contains("Npgsql") == true ||
+                    d.ServiceType.FullName?.Contains("Npgsql") == true ||
+                    d.ServiceType == typeof(CatalogDbContext) ||
+                    d.ServiceType == typeof(OrderingDbContext) ||
+                    d.ServiceType == typeof(BillingDbContext))
+                .ToList();
 
-            // Register with shared in-memory SQLite
+            foreach (var descriptor in descriptorsToRemove)
+                services.Remove(descriptor);
+
+            // Re-register with shared in-memory SQLite
             services.AddDbContext<CatalogDbContext>(o => o.UseSqlite(_connection));
             services.AddDbContext<OrderingDbContext>(o => o.UseSqlite(_connection));
             services.AddDbContext<BillingDbContext>(o => o.UseSqlite(_connection));
         });
-    }
-
-    private static void RemoveService<T>(IServiceCollection services)
-    {
-        var descriptor = services.SingleOrDefault(d => d.ServiceType == typeof(T));
-        if (descriptor is not null)
-            services.Remove(descriptor);
     }
 
     public async Task InitializeAsync()

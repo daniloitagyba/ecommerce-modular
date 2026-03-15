@@ -2,6 +2,7 @@ using ECommerce.Modules.Billing.Application.Events;
 using ECommerce.Modules.Billing.Application.Queries;
 using ECommerce.Shared.Domain;
 using ECommerce.Tests.Integration.Fixtures;
+using MassTransit;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
@@ -16,12 +17,16 @@ public class GetPaymentsHandlerTests : IDisposable
     {
         await using var db = _factory.CreateBillingContext();
         var paymentRepo = _factory.CreatePaymentRepository(db);
+        var invoiceRepo = _factory.CreateInvoiceRepository(db);
         var orderId = Guid.NewGuid();
 
-        // Create payment via event handler
-        var paymentLogger = Substitute.For<ILogger<ProcessPaymentOnOrderCreated>>();
-        var paymentHandler = new ProcessPaymentOnOrderCreated(paymentRepo, db, paymentLogger);
-        await paymentHandler.Handle(new OrderCreatedIntegrationEvent(orderId, "a@b.com", 500m), CancellationToken.None);
+        // Create payment via consumer
+        var logger = Substitute.For<ILogger<OrderCreatedConsumer>>();
+        var consumer = new OrderCreatedConsumer(paymentRepo, invoiceRepo, db, logger);
+        var consumeContext = Substitute.For<ConsumeContext<OrderCreatedIntegrationEvent>>();
+        consumeContext.Message.Returns(new OrderCreatedIntegrationEvent(orderId, "a@b.com", 500m));
+        consumeContext.CancellationToken.Returns(CancellationToken.None);
+        await consumer.Consume(consumeContext);
 
         var handler = new GetPaymentsByOrderHandler(paymentRepo);
 

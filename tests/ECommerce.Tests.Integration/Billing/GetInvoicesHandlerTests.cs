@@ -2,6 +2,7 @@ using ECommerce.Modules.Billing.Application.Events;
 using ECommerce.Modules.Billing.Application.Queries;
 using ECommerce.Shared.Domain;
 using ECommerce.Tests.Integration.Fixtures;
+using MassTransit;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
@@ -19,15 +20,13 @@ public class GetInvoicesHandlerTests : IDisposable
         var invoiceRepo = _factory.CreateInvoiceRepository(db);
         var orderId = Guid.NewGuid();
 
-        // Create payment first
-        var paymentLogger = Substitute.For<ILogger<ProcessPaymentOnOrderCreated>>();
-        var paymentHandler = new ProcessPaymentOnOrderCreated(paymentRepo, db, paymentLogger);
-        await paymentHandler.Handle(new OrderCreatedIntegrationEvent(orderId, "john@example.com", 1500m), CancellationToken.None);
-
-        // Then create invoice
-        var invoiceLogger = Substitute.For<ILogger<GenerateInvoiceOnOrderCreated>>();
-        var invoiceHandler = new GenerateInvoiceOnOrderCreated(paymentRepo, invoiceRepo, db, invoiceLogger);
-        await invoiceHandler.Handle(new OrderCreatedIntegrationEvent(orderId, "john@example.com", 1500m), CancellationToken.None);
+        // Create payment + invoice via consumer
+        var logger = Substitute.For<ILogger<OrderCreatedConsumer>>();
+        var consumer = new OrderCreatedConsumer(paymentRepo, invoiceRepo, db, logger);
+        var consumeContext = Substitute.For<ConsumeContext<OrderCreatedIntegrationEvent>>();
+        consumeContext.Message.Returns(new OrderCreatedIntegrationEvent(orderId, "john@example.com", 1500m));
+        consumeContext.CancellationToken.Returns(CancellationToken.None);
+        await consumer.Consume(consumeContext);
 
         var handler = new GetInvoicesByOrderHandler(invoiceRepo);
 

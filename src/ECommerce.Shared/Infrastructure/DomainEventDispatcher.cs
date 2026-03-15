@@ -14,7 +14,11 @@ public static class DomainEventDispatcher
             .Select(e => e.Entity)
             .ToList();
 
-        var domainEvents = entities.SelectMany(e => e.DomainEvents).ToList();
+        var domainEvents = entities
+            .SelectMany(e => e.DomainEvents)
+            .Where(e => e is not IIntegrationEvent) // Integration events go to outbox
+            .ToList();
+
         entities.ForEach(e => e.ClearDomainEvents());
 
         foreach (var domainEvent in domainEvents)

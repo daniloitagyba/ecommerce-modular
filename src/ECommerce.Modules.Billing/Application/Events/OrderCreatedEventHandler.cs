@@ -1,21 +1,26 @@
 using ECommerce.Modules.Billing.Domain;
 using ECommerce.Shared.Domain;
-using MediatR;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace ECommerce.Modules.Billing.Application.Events;
 
 /// <summary>
-/// SRP: Handles payment creation when an order is created.
+/// MassTransit consumer: processes payment and generates invoice when an order is created.
+/// Replaces the former synchronous MediatR notification handlers with async outbox-driven processing.
 /// </summary>
-public sealed class ProcessPaymentOnOrderCreated(
+public sealed class OrderCreatedConsumer(
     IPaymentRepository paymentRepository,
+    IInvoiceRepository invoiceRepository,
     IBillingUnitOfWork unitOfWork,
-    ILogger<ProcessPaymentOnOrderCreated> logger) : INotificationHandler<OrderCreatedIntegrationEvent>
+    ILogger<OrderCreatedConsumer> logger) : IConsumer<OrderCreatedIntegrationEvent>
 {
-    public async Task Handle(OrderCreatedIntegrationEvent notification, CancellationToken ct)
+    public async Task Consume(ConsumeContext<OrderCreatedIntegrationEvent> context)
     {
+        var notification = context.Message;
+
+        // 1. Process payment
         logger.LogInformation("Processing payment for Order {OrderId}, Amount: {Amount}",
             notification.OrderId, notification.TotalAmount);
 
@@ -23,38 +28,20 @@ public sealed class ProcessPaymentOnOrderCreated(
         payment.MarkAsCompleted();
 
         paymentRepository.Add(payment);
-        await unitOfWork.SaveChangesAsync(ct);
+        await unitOfWork.SaveChangesAsync(context.CancellationToken);
 
         logger.LogInformation("Payment {PaymentId} completed for Order {OrderId}",
             payment.Id, notification.OrderId);
-    }
-}
 
-/// <summary>
-/// SRP: Handles invoice generation when an order is created.
-/// </summary>
-public sealed class GenerateInvoiceOnOrderCreated(
-    IPaymentRepository paymentRepository,
-    IInvoiceRepository invoiceRepository,
-    IBillingUnitOfWork unitOfWork,
-    ILogger<GenerateInvoiceOnOrderCreated> logger) : INotificationHandler<OrderCreatedIntegrationEvent>
-{
-    public async Task Handle(OrderCreatedIntegrationEvent notification, CancellationToken ct)
-    {
-        // Find the payment for this order (created by ProcessPaymentOnOrderCreated)
-        var payment = (await paymentRepository.QueryByOrderId(notification.OrderId)
-            .ToListAsync(ct)).FirstOrDefault();
-
-        var paymentId = payment?.Id ?? Guid.Empty;
-
+        // 2. Generate invoice
         var invoice = Invoice.Create(
             notification.OrderId,
-            paymentId,
+            payment.Id,
             notification.CustomerEmail,
             notification.TotalAmount);
 
         invoiceRepository.Add(invoice);
-        await unitOfWork.SaveChangesAsync(ct);
+        await unitOfWork.SaveChangesAsync(context.CancellationToken);
 
         logger.LogInformation("Invoice {InvoiceNumber} issued for Order {OrderId}",
             invoice.InvoiceNumber, notification.OrderId);

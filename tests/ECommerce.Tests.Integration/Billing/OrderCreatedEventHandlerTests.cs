@@ -1,35 +1,33 @@
 using ECommerce.Modules.Billing.Application.Events;
 using ECommerce.Shared.Domain;
 using ECommerce.Tests.Integration.Fixtures;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
 namespace ECommerce.Tests.Integration.Billing;
 
-public class OrderCreatedEventHandlerTests : IDisposable
+public class OrderCreatedConsumerTests : IDisposable
 {
     private readonly DbContextFactory _factory = new();
 
     [Fact]
-    public async Task Handle_ShouldCreatePaymentAndInvoice()
+    public async Task Consume_ShouldCreatePaymentAndInvoice()
     {
         await using var db = _factory.CreateBillingContext();
         var paymentRepo = _factory.CreatePaymentRepository(db);
         var invoiceRepo = _factory.CreateInvoiceRepository(db);
 
-        var paymentLogger = Substitute.For<ILogger<ProcessPaymentOnOrderCreated>>();
-        var invoiceLogger = Substitute.For<ILogger<GenerateInvoiceOnOrderCreated>>();
+        var logger = Substitute.For<ILogger<OrderCreatedConsumer>>();
+        var consumer = new OrderCreatedConsumer(paymentRepo, invoiceRepo, db, logger);
 
         var evt = new OrderCreatedIntegrationEvent(Guid.NewGuid(), "john@example.com", 1999.98m);
+        var consumeContext = Substitute.For<ConsumeContext<OrderCreatedIntegrationEvent>>();
+        consumeContext.Message.Returns(evt);
+        consumeContext.CancellationToken.Returns(CancellationToken.None);
 
-        // Process payment first
-        var paymentHandler = new ProcessPaymentOnOrderCreated(paymentRepo, db, paymentLogger);
-        await paymentHandler.Handle(evt, CancellationToken.None);
-
-        // Then generate invoice
-        var invoiceHandler = new GenerateInvoiceOnOrderCreated(paymentRepo, invoiceRepo, db, invoiceLogger);
-        await invoiceHandler.Handle(evt, CancellationToken.None);
+        await consumer.Consume(consumeContext);
 
         var payment = await db.Payments.FirstOrDefaultAsync(p => p.OrderId == evt.OrderId);
         payment.Should().NotBeNull();

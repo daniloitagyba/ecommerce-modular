@@ -1,3 +1,4 @@
+using System.Text.Json;
 using ECommerce.Modules.Ordering.Domain;
 using ECommerce.Shared.Domain;
 using ECommerce.Shared.Infrastructure;
@@ -11,6 +12,7 @@ public sealed class OrderingDbContext(DbContextOptions<OrderingDbContext> option
 {
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -32,12 +34,44 @@ public sealed class OrderingDbContext(DbContextOptions<OrderingDbContext> option
             b.Property(l => l.UnitPrice).HasPrecision(18, 2);
             b.Ignore(l => l.Total);
         });
+
+        modelBuilder.Entity<OutboxMessage>(b =>
+        {
+            b.ToTable("OutboxMessages");
+            b.HasKey(o => o.Id);
+            b.Property(o => o.Type).HasMaxLength(500).IsRequired();
+            b.Property(o => o.Content).IsRequired();
+            b.HasIndex(o => o.ProcessedAt);
+        });
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
+        ConvertIntegrationEventsToOutboxMessages();
         var result = await base.SaveChangesAsync(cancellationToken);
         await this.DispatchDomainEventsAsync(publisher, cancellationToken);
         return result;
+    }
+
+    private void ConvertIntegrationEventsToOutboxMessages()
+    {
+        var entities = ChangeTracker
+            .Entries<Entity>()
+            .Where(e => e.Entity.DomainEvents.Any(d => d is IIntegrationEvent))
+            .Select(e => e.Entity)
+            .ToList();
+
+        foreach (var entity in entities)
+        {
+            var integrationEvents = entity.DomainEvents.OfType<IIntegrationEvent>().ToList();
+            foreach (var evt in integrationEvents)
+            {
+                OutboxMessages.Add(new OutboxMessage
+                {
+                    Type = evt.GetType().AssemblyQualifiedName!,
+                    Content = JsonSerializer.Serialize(evt, evt.GetType())
+                });
+            }
+        }
     }
 }

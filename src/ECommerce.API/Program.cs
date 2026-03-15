@@ -1,11 +1,16 @@
 using ECommerce.API;
+using ECommerce.API.BackgroundJobs;
 using ECommerce.Modules.Billing;
+using ECommerce.Modules.Billing.Application.Events;
 using ECommerce.Modules.Catalog;
 using ECommerce.Modules.Ordering;
 using ECommerce.Shared.Application;
 using FluentValidation;
+using MassTransit;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Quartz;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,12 +34,37 @@ builder.Services.AddValidatorsFromAssemblies([
     typeof(BillingModule).Assembly
 ]);
 
-// Register modules — the host owns the database provider choice
-builder.Services.AddCatalogModule(db => db.UseSqlite(connectionString));
-builder.Services.AddOrderingModule(db => db.UseSqlite(connectionString));
-builder.Services.AddBillingModule(db => db.UseSqlite(connectionString));
+// Register modules — PostgreSQL
+builder.Services.AddCatalogModule(db => db.UseNpgsql(connectionString));
+builder.Services.AddOrderingModule(db => db.UseNpgsql(connectionString));
+builder.Services.AddBillingModule(db => db.UseNpgsql(connectionString));
 
-// OpenAPI / Swagger
+// MassTransit — in-memory transport with Billing consumers
+builder.Services.AddMassTransit(cfg =>
+{
+    cfg.AddConsumers(typeof(BillingModule).Assembly);
+    cfg.UsingInMemory((context, bus) =>
+    {
+        bus.ConfigureEndpoints(context);
+    });
+});
+
+// Quartz.NET — background job for Transactional Outbox processing
+builder.Services.AddQuartz(q =>
+{
+    var jobKey = new JobKey("ProcessOutboxJob");
+    q.AddJob<ProcessOutboxJob>(opts => opts.WithIdentity(jobKey));
+    q.AddTrigger(opts => opts
+        .ForJob(jobKey)
+        .WithIdentity("ProcessOutboxTrigger")
+        .WithSimpleSchedule(x => x
+            .WithIntervalInSeconds(
+                builder.Configuration.GetValue("Outbox:IntervalSeconds", 10))
+            .RepeatForever()));
+});
+builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
+
+// OpenAPI
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
@@ -42,6 +72,13 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.MapScalarApiReference("/docs", options =>
+    {
+        options
+            .WithTitle("ECommerce Modular API")
+            .WithTheme(ScalarTheme.BluePlanet)
+            .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient);
+    });
 }
 
 // Global error handling for validation exceptions
@@ -68,6 +105,9 @@ app.UseExceptionHandler(errorApp =>
         }
     });
 });
+
+// Redirect root to API docs
+app.MapGet("/", () => Results.Redirect("/docs")).ExcludeFromDescription();
 
 // Map module endpoints
 app.MapCatalogEndpoints();
