@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ECommerce.API/ECommerce.API.csproj" />
+    <Project Path="src/ECommerce.Modules.Billing/ECommerce.Modules.Billing.csproj" />
+    <Project Path="src/ECommerce.Modules.Catalog/ECommerce.Modules.Catalog.csproj" />
+    <Project Path="src/ECommerce.Modules.Ordering/ECommerce.Modules.Ordering.csproj" />
+    <Project Path="src/ECommerce.Shared/ECommerce.Shared.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ECommerce.Tests.EndToEnd/ECommerce.Tests.EndToEnd.csproj" />
+    <Project Path="tests/ECommerce.Tests.Integration/ECommerce.Tests.Integration.csproj" />
+    <Project Path="tests/ECommerce.Tests.Unit/ECommerce.Tests.Unit.csproj" />
+  </Folder>
+</Solution>
