@@ -9,12 +9,12 @@ public sealed class Order : Entity
     public DateTime CreatedAt { get; private set; } = DateTime.UtcNow;
     public decimal TotalAmount => _lines.Sum(l => l.Total);
 
-    private readonly List<OrderLine> _lines = [];
-    public IReadOnlyList<OrderLine> Lines => _lines.AsReadOnly();
+    private readonly List<OrderItem> _lines = [];
+    public IReadOnlyList<OrderItem> Lines => _lines.AsReadOnly();
 
     private Order() { }
 
-    public static Result<Order> Create(string customerEmail, IEnumerable<OrderLine> lines)
+    public static Result<Order> Create(string customerEmail, IEnumerable<OrderItem> lines)
     {
         if (string.IsNullOrWhiteSpace(customerEmail))
             return Result<Order>.Failure(OrderErrors.EmptyEmail);

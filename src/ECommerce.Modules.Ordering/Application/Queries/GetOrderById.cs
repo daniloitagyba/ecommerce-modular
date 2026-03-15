@@ -20,6 +20,6 @@ public sealed class GetOrderByIdHandler(IOrderRepository repository)
             order.CustomerEmail,
             order.Status.ToString(),
             order.CreatedAt,
-            order.Lines.Select(l => new OrderLineResponseDto(l.ProductId, l.ProductName, l.UnitPrice, l.Quantity)).ToList()));
+            order.Lines.Select(l => new OrderItemResponseDto(l.ProductId, l.ProductName, l.UnitPrice, l.Quantity)).ToList()));
     }
 }

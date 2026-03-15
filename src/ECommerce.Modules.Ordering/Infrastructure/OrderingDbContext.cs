@@ -10,7 +10,7 @@ public sealed class OrderingDbContext(DbContextOptions<OrderingDbContext> option
     : DbContext(options), IOrderingUnitOfWork
 {
     public DbSet<Order> Orders => Set<Order>();
-    public DbSet<OrderLine> OrderLines => Set<OrderLine>();
+    public DbSet<OrderItem> OrderItems => Set<OrderItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -25,7 +25,7 @@ public sealed class OrderingDbContext(DbContextOptions<OrderingDbContext> option
             b.Ignore(o => o.TotalAmount);
         });
 
-        modelBuilder.Entity<OrderLine>(b =>
+        modelBuilder.Entity<OrderItem>(b =>
         {
             b.HasKey(l => l.Id);
             b.Property(l => l.ProductName).HasMaxLength(200).IsRequired();

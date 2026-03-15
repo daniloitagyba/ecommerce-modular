@@ -95,5 +95,5 @@ public class OrderingEndpointTests(ECommerceWebAppFactory factory) : IClassFixtu
     }
 }
 
-public record OrderResponse(Guid Id, string CustomerEmail, string Status, DateTime CreatedAt, List<OrderLineResponse> Lines);
-public record OrderLineResponse(Guid ProductId, string ProductName, decimal UnitPrice, int Quantity);
+public record OrderResponse(Guid Id, string CustomerEmail, string Status, DateTime CreatedAt, List<OrderItemResponse> Lines);
+public record OrderItemResponse(Guid ProductId, string ProductName, decimal UnitPrice, int Quantity);

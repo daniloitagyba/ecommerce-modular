@@ -18,9 +18,9 @@ public class GetOrdersHandlerTests : IDisposable
         // Create two orders
         var placeHandler = new PlaceOrderHandler(repository, db);
         await placeHandler.Handle(new PlaceOrderCommand("a@b.com",
-            [new OrderLineDto(Guid.NewGuid(), "P1", 10m, 1)]), CancellationToken.None);
+            [new OrderItemDto(Guid.NewGuid(), "P1", 10m, 1)]), CancellationToken.None);
         await placeHandler.Handle(new PlaceOrderCommand("c@d.com",
-            [new OrderLineDto(Guid.NewGuid(), "P2", 20m, 2)]), CancellationToken.None);
+            [new OrderItemDto(Guid.NewGuid(), "P2", 20m, 2)]), CancellationToken.None);
 
         var handler = new GetOrdersHandler(repository);
 
@@ -52,7 +52,7 @@ public class GetOrdersHandlerTests : IDisposable
         var repository = _factory.CreateOrderRepository(db);
         var placeHandler = new PlaceOrderHandler(repository, db);
         var orderResult = await placeHandler.Handle(new PlaceOrderCommand("a@b.com",
-            [new OrderLineDto(Guid.NewGuid(), "Laptop", 999m, 1)]), CancellationToken.None);
+            [new OrderItemDto(Guid.NewGuid(), "Laptop", 999m, 1)]), CancellationToken.None);
 
         var handler = new GetOrderByIdHandler(repository);
 

@@ -2,14 +2,14 @@ using ECommerce.Modules.Ordering.Domain;
 
 namespace ECommerce.Tests.Unit.Ordering;
 
-public class OrderLineTests
+public class OrderItemTests
 {
     [Fact]
     public void Create_ShouldInitializeAllProperties()
     {
         var productId = Guid.NewGuid();
 
-        var line = OrderLine.Create(productId, "Laptop", 999.99m, 2);
+        var line = OrderItem.Create(productId, "Laptop", 999.99m, 2);
 
         line.Id.Should().NotBeEmpty();
         line.ProductId.Should().Be(productId);
@@ -21,7 +21,7 @@ public class OrderLineTests
     [Fact]
     public void Total_ShouldCalculateCorrectly()
     {
-        var line = OrderLine.Create(Guid.NewGuid(), "Laptop", 999.99m, 3);
+        var line = OrderItem.Create(Guid.NewGuid(), "Laptop", 999.99m, 3);
 
         line.Total.Should().Be(2999.97m);
     }

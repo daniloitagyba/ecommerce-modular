@@ -5,9 +5,9 @@ using MediatR;
 
 namespace ECommerce.Modules.Ordering.Application.Commands;
 
-public sealed record PlaceOrderCommand(string CustomerEmail, List<OrderLineDto> Lines) : IRequest<Result<Guid>>;
+public sealed record PlaceOrderCommand(string CustomerEmail, List<OrderItemDto> Lines) : IRequest<Result<Guid>>;
 
-public sealed record OrderLineDto(Guid ProductId, string ProductName, decimal UnitPrice, int Quantity);
+public sealed record OrderItemDto(Guid ProductId, string ProductName, decimal UnitPrice, int Quantity);
 
 public sealed class PlaceOrderValidator : AbstractValidator<PlaceOrderCommand>
 {
@@ -31,7 +31,7 @@ public sealed class PlaceOrderHandler(IOrderRepository repository, IOrderingUnit
     public async Task<Result<Guid>> Handle(PlaceOrderCommand request, CancellationToken ct)
     {
         var lines = request.Lines.Select(l =>
-            OrderLine.Create(l.ProductId, l.ProductName, l.UnitPrice, l.Quantity));
+            OrderItem.Create(l.ProductId, l.ProductName, l.UnitPrice, l.Quantity));
 
         var result = Order.Create(request.CustomerEmail, lines);
         if (result.IsFailure)

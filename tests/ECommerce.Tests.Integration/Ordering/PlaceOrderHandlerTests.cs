@@ -17,8 +17,8 @@ public class PlaceOrderHandlerTests : IDisposable
 
         var command = new PlaceOrderCommand("john@example.com",
         [
-            new OrderLineDto(Guid.NewGuid(), "Laptop", 999.99m, 2),
-            new OrderLineDto(Guid.NewGuid(), "Mouse", 50m, 1)
+            new OrderItemDto(Guid.NewGuid(), "Laptop", 999.99m, 2),
+            new OrderItemDto(Guid.NewGuid(), "Mouse", 50m, 1)
         ]);
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -40,7 +40,7 @@ public class PlaceOrderHandlerTests : IDisposable
 
         var command = new PlaceOrderCommand("john@example.com",
         [
-            new OrderLineDto(productId, "Laptop", 999.99m, 3)
+            new OrderItemDto(productId, "Laptop", 999.99m, 3)
         ]);
 
         var result = await handler.Handle(command, CancellationToken.None);

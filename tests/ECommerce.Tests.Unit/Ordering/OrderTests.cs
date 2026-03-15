@@ -10,8 +10,8 @@ public class OrderTests
     {
         var lines = new[]
         {
-            OrderLine.Create(Guid.NewGuid(), "Laptop", 1000m, 1),
-            OrderLine.Create(Guid.NewGuid(), "Mouse", 50m, 2)
+            OrderItem.Create(Guid.NewGuid(), "Laptop", 1000m, 1),
+            OrderItem.Create(Guid.NewGuid(), "Mouse", 50m, 2)
         };
 
         var result = Order.Create("john@example.com", lines);
@@ -25,7 +25,7 @@ public class OrderTests
     [Fact]
     public void Create_ShouldFail_WhenEmailIsEmpty()
     {
-        var lines = new[] { OrderLine.Create(Guid.NewGuid(), "P", 10m, 1) };
+        var lines = new[] { OrderItem.Create(Guid.NewGuid(), "P", 10m, 1) };
 
         var result = Order.Create("", lines);
 
@@ -47,8 +47,8 @@ public class OrderTests
     {
         var lines = new[]
         {
-            OrderLine.Create(Guid.NewGuid(), "Laptop", 1000m, 2),
-            OrderLine.Create(Guid.NewGuid(), "Mouse", 50m, 3)
+            OrderItem.Create(Guid.NewGuid(), "Laptop", 1000m, 2),
+            OrderItem.Create(Guid.NewGuid(), "Mouse", 50m, 3)
         };
 
         var order = Order.Create("john@example.com", lines).Value!;
@@ -59,7 +59,7 @@ public class OrderTests
     [Fact]
     public void Create_ShouldRaiseOrderCreatedIntegrationEvent()
     {
-        var lines = new[] { OrderLine.Create(Guid.NewGuid(), "Laptop", 1000m, 1) };
+        var lines = new[] { OrderItem.Create(Guid.NewGuid(), "Laptop", 1000m, 1) };
 
         var order = Order.Create("john@example.com", lines).Value!;
 
@@ -76,7 +76,7 @@ public class OrderTests
     [Fact]
     public void MarkAsPaid_ShouldChangeStatus()
     {
-        var order = Order.Create("a@b.com", [OrderLine.Create(Guid.NewGuid(), "P", 10m, 1)]).Value!;
+        var order = Order.Create("a@b.com", [OrderItem.Create(Guid.NewGuid(), "P", 10m, 1)]).Value!;
         order.MarkAsPaid();
         order.Status.Should().Be(OrderStatus.Paid);
     }
@@ -84,7 +84,7 @@ public class OrderTests
     [Fact]
     public void MarkAsShipped_ShouldChangeStatus()
     {
-        var order = Order.Create("a@b.com", [OrderLine.Create(Guid.NewGuid(), "P", 10m, 1)]).Value!;
+        var order = Order.Create("a@b.com", [OrderItem.Create(Guid.NewGuid(), "P", 10m, 1)]).Value!;
         order.MarkAsShipped();
         order.Status.Should().Be(OrderStatus.Shipped);
     }
@@ -92,7 +92,7 @@ public class OrderTests
     [Fact]
     public void Cancel_ShouldChangeStatus()
     {
-        var order = Order.Create("a@b.com", [OrderLine.Create(Guid.NewGuid(), "P", 10m, 1)]).Value!;
+        var order = Order.Create("a@b.com", [OrderItem.Create(Guid.NewGuid(), "P", 10m, 1)]).Value!;
         order.Cancel();
         order.Status.Should().Be(OrderStatus.Cancelled);
     }

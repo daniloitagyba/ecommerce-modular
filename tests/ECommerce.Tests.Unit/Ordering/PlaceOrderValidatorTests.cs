@@ -12,7 +12,7 @@ public class PlaceOrderValidatorTests
     {
         var command = new PlaceOrderCommand("john@example.com",
         [
-            new OrderLineDto(Guid.NewGuid(), "Laptop", 999.99m, 1)
+            new OrderItemDto(Guid.NewGuid(), "Laptop", 999.99m, 1)
         ]);
 
         _validator.TestValidate(command).ShouldNotHaveAnyValidationErrors();
@@ -23,7 +23,7 @@ public class PlaceOrderValidatorTests
     {
         var command = new PlaceOrderCommand("",
         [
-            new OrderLineDto(Guid.NewGuid(), "Laptop", 999.99m, 1)
+            new OrderItemDto(Guid.NewGuid(), "Laptop", 999.99m, 1)
         ]);
 
         _validator.TestValidate(command).ShouldHaveValidationErrorFor(x => x.CustomerEmail);
@@ -34,7 +34,7 @@ public class PlaceOrderValidatorTests
     {
         var command = new PlaceOrderCommand("not-an-email",
         [
-            new OrderLineDto(Guid.NewGuid(), "Laptop", 999.99m, 1)
+            new OrderItemDto(Guid.NewGuid(), "Laptop", 999.99m, 1)
         ]);
 
         _validator.TestValidate(command).ShouldHaveValidationErrorFor(x => x.CustomerEmail);
@@ -53,7 +53,7 @@ public class PlaceOrderValidatorTests
     {
         var command = new PlaceOrderCommand("john@example.com",
         [
-            new OrderLineDto(Guid.Empty, "Laptop", 999.99m, 1)
+            new OrderItemDto(Guid.Empty, "Laptop", 999.99m, 1)
         ]);
 
         var result = _validator.TestValidate(command);
@@ -65,7 +65,7 @@ public class PlaceOrderValidatorTests
     {
         var command = new PlaceOrderCommand("john@example.com",
         [
-            new OrderLineDto(Guid.NewGuid(), "Laptop", 999.99m, 0)
+            new OrderItemDto(Guid.NewGuid(), "Laptop", 999.99m, 0)
         ]);
 
         var result = _validator.TestValidate(command);
@@ -77,7 +77,7 @@ public class PlaceOrderValidatorTests
     {
         var command = new PlaceOrderCommand("john@example.com",
         [
-            new OrderLineDto(Guid.NewGuid(), "Laptop", 0m, 1)
+            new OrderItemDto(Guid.NewGuid(), "Laptop", 0m, 1)
         ]);
 
         var result = _validator.TestValidate(command);
