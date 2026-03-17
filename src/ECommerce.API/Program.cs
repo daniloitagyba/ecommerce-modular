@@ -11,8 +11,23 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Quartz;
 using Scalar.AspNetCore;
+using Serilog;
+using Serilog.Events;
+
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Infrastructure", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Migrations", LogEventLevel.Warning)
+    .MinimumLevel.Override("Quartz", LogEventLevel.Warning)
+    .WriteTo.Console(
+        outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}",
+        theme: Serilog.Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code)
+    .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseSerilog();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")!;
 
@@ -116,6 +131,10 @@ app.MapBillingEndpoints();
 
 // Initialize database (EnsureCreated for development)
 await app.InitializeDatabaseAsync();
+
+// Seed fake data if database is empty (skip in Testing to keep tests deterministic)
+if (!app.Environment.IsEnvironment("Testing"))
+    await app.SeedAsync();
 
 app.Run();
 

@@ -10,8 +10,8 @@ public class Repository<T>(DbContext context) : IRepository<T> where T : Entity
     public async Task<T?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         await DbSet.FindAsync([id], ct);
 
-    public async Task<List<T>> GetAllAsync(CancellationToken ct = default) =>
-        await DbSet.ToListAsync(ct);
+    public async Task<List<T>> GetAllAsync(int limit = 100, CancellationToken ct = default) =>
+        await DbSet.Take(limit).ToListAsync(ct);
 
     public IQueryable<T> Query() => DbSet.AsQueryable();
 

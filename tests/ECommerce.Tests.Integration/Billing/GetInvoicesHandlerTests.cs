@@ -8,9 +8,10 @@ using NSubstitute;
 
 namespace ECommerce.Tests.Integration.Billing;
 
-public class GetInvoicesHandlerTests : IDisposable
+[Collection("Postgres")]
+public class GetInvoicesHandlerTests(PostgresContainerFixture postgres) : IAsyncLifetime
 {
-    private readonly DbContextFactory _factory = new();
+    private readonly DbContextFactory _factory = new(postgres.ConnectionString);
 
     [Fact]
     public async Task Handle_ShouldReturnInvoicesForOrder()
@@ -52,5 +53,6 @@ public class GetInvoicesHandlerTests : IDisposable
         result.Should().BeEmpty();
     }
 
-    public void Dispose() => _factory.Dispose();
+    public Task InitializeAsync() => Task.CompletedTask;
+    public async Task DisposeAsync() => await _factory.DisposeAsync();
 }

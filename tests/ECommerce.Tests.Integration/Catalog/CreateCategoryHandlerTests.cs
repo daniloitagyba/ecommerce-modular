@@ -3,9 +3,10 @@ using ECommerce.Tests.Integration.Fixtures;
 
 namespace ECommerce.Tests.Integration.Catalog;
 
-public class CreateCategoryHandlerTests : IDisposable
+[Collection("Postgres")]
+public class CreateCategoryHandlerTests(PostgresContainerFixture postgres) : IAsyncLifetime
 {
-    private readonly DbContextFactory _factory = new();
+    private readonly DbContextFactory _factory = new(postgres.ConnectionString);
 
     [Fact]
     public async Task Handle_ShouldCreateCategoryInDatabase()
@@ -18,12 +19,13 @@ public class CreateCategoryHandlerTests : IDisposable
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Should().NotBeEmpty();
+        result.Value.Should().NotBe(Guid.Empty);
         var category = await db.Categories.FindAsync(result.Value);
         category.Should().NotBeNull();
         category!.Name.Should().Be("Electronics");
         category.Description.Should().Be("Gadgets and devices");
     }
 
-    public void Dispose() => _factory.Dispose();
+    public Task InitializeAsync() => Task.CompletedTask;
+    public async Task DisposeAsync() => await _factory.DisposeAsync();
 }

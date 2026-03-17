@@ -1,11 +1,38 @@
 using System.Net;
 using System.Net.Http.Json;
+using ECommerce.Modules.Catalog.Infrastructure;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ECommerce.Tests.EndToEnd;
 
 public class OrderingEndpointTests(ECommerceWebAppFactory factory) : IClassFixture<ECommerceWebAppFactory>
 {
     private readonly HttpClient _client = factory.CreateClient();
+
+    private async Task<Guid> GetSeededProductIdAsync()
+    {
+        using var scope = factory.Services.CreateScope();
+        var catalogDb = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
+        var product = await catalogDb.Products.FirstOrDefaultAsync();
+        if (product is not null)
+            return product.Id;
+
+        // Seed a product if none exist
+        var category = (await catalogDb.Categories.FirstOrDefaultAsync())
+            ?? ECommerce.Modules.Catalog.Domain.Category.Create("Test Category", "Test").Value;
+        if (!await catalogDb.Categories.AnyAsync())
+        {
+            catalogDb.Categories.Add(category);
+            await catalogDb.SaveChangesAsync();
+        }
+
+        var newProduct = ECommerce.Modules.Catalog.Domain.Product.Create(
+            "Test Product", "TEST-SKU-001", 99.99m, 100, category.Id).Value;
+        catalogDb.Products.Add(newProduct);
+        await catalogDb.SaveChangesAsync();
+        return newProduct.Id;
+    }
 
     [Fact]
     public async Task GetOrders_ShouldReturnPagedResult()
@@ -15,7 +42,7 @@ public class OrderingEndpointTests(ECommerceWebAppFactory factory) : IClassFixtu
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var page = await response.Content.ReadFromJsonAsync<PagedResponse<OrderResponse>>();
         page.Should().NotBeNull();
-        page!.Page.Should().BeGreaterThanOrEqualTo(1);
+        page.Page.Should().BeGreaterThanOrEqualTo(1);
         page.PageSize.Should().BeGreaterThan(0);
         page.TotalCount.Should().BeGreaterThanOrEqualTo(0);
     }
@@ -23,29 +50,33 @@ public class OrderingEndpointTests(ECommerceWebAppFactory factory) : IClassFixtu
     [Fact]
     public async Task PlaceOrder_ShouldReturnCreated()
     {
+        var productId = await GetSeededProductIdAsync();
+
         var response = await _client.PostAsJsonAsync("/api/orders", new
         {
             customerEmail = "test@example.com",
-            lines = new[]
+            items = new[]
             {
-                new { productId = Guid.NewGuid(), productName = "Laptop", unitPrice = 999.99, quantity = 1 }
+                new { productId, quantity = 1 }
             }
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
         var body = await response.Content.ReadFromJsonAsync<IdResponse>();
-        body!.Id.Should().NotBeEmpty();
+        body!.Id.Should().NotBe(Guid.Empty);
     }
 
     [Fact]
     public async Task PlaceOrder_ShouldReturn400_WhenEmailInvalid()
     {
+        var productId = await GetSeededProductIdAsync();
+
         var response = await _client.PostAsJsonAsync("/api/orders", new
         {
             customerEmail = "not-an-email",
-            lines = new[]
+            items = new[]
             {
-                new { productId = Guid.NewGuid(), productName = "Laptop", unitPrice = 999.99, quantity = 1 }
+                new { productId, quantity = 1 }
             }
         });
 
@@ -53,12 +84,12 @@ public class OrderingEndpointTests(ECommerceWebAppFactory factory) : IClassFixtu
     }
 
     [Fact]
-    public async Task PlaceOrder_ShouldReturn400_WhenLinesEmpty()
+    public async Task PlaceOrder_ShouldReturn400_WhenItemsEmpty()
     {
         var response = await _client.PostAsJsonAsync("/api/orders", new
         {
             customerEmail = "test@example.com",
-            lines = Array.Empty<object>()
+            items = Array.Empty<object>()
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -67,12 +98,14 @@ public class OrderingEndpointTests(ECommerceWebAppFactory factory) : IClassFixtu
     [Fact]
     public async Task GetOrderById_ShouldReturnOrder()
     {
+        var productId = await GetSeededProductIdAsync();
+
         var createResponse = await _client.PostAsJsonAsync("/api/orders", new
         {
             customerEmail = "detail@test.com",
-            lines = new[]
+            items = new[]
             {
-                new { productId = Guid.NewGuid(), productName = "Mouse", unitPrice = 50.0, quantity = 3 }
+                new { productId, quantity = 3 }
             }
         });
         var createBody = await createResponse.Content.ReadFromJsonAsync<IdResponse>();
@@ -83,7 +116,8 @@ public class OrderingEndpointTests(ECommerceWebAppFactory factory) : IClassFixtu
         var order = await response.Content.ReadFromJsonAsync<OrderResponse>();
         order!.CustomerEmail.Should().Be("detail@test.com");
         order.Status.Should().Be("Pending");
-        order.Lines.Should().ContainSingle().Which.ProductName.Should().Be("Mouse");
+        order.TotalAmount.Should().BeGreaterThan(0);
+        order.Items.Should().ContainSingle();
     }
 
     [Fact]
@@ -95,5 +129,5 @@ public class OrderingEndpointTests(ECommerceWebAppFactory factory) : IClassFixtu
     }
 }
 
-public record OrderResponse(Guid Id, string CustomerEmail, string Status, DateTime CreatedAt, List<OrderItemResponse> Lines);
+public record OrderResponse(Guid Id, string CustomerEmail, string Status, DateTime CreatedAt, decimal TotalAmount, List<OrderItemResponse> Items);
 public record OrderItemResponse(Guid ProductId, string ProductName, decimal UnitPrice, int Quantity);

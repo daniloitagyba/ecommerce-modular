@@ -42,6 +42,7 @@ public sealed class ProcessOutboxJob(
                 {
                     logger.LogWarning("Unknown event type: {Type}. Skipping message {Id}", message.Type, message.Id);
                     message.ProcessedAt = DateTime.UtcNow;
+                    await dbContext.SaveChangesAsync(context.CancellationToken);
                     continue;
                 }
 
@@ -50,11 +51,13 @@ public sealed class ProcessOutboxJob(
                 {
                     logger.LogWarning("Failed to deserialize message {Id}. Skipping", message.Id);
                     message.ProcessedAt = DateTime.UtcNow;
+                    await dbContext.SaveChangesAsync(context.CancellationToken);
                     continue;
                 }
 
                 await bus.Publish(@event, eventType, context.CancellationToken);
                 message.ProcessedAt = DateTime.UtcNow;
+                await dbContext.SaveChangesAsync(context.CancellationToken);
 
                 logger.LogInformation("Published outbox message {Id} of type {Type}", message.Id, eventType.Name);
             }
@@ -63,7 +66,5 @@ public sealed class ProcessOutboxJob(
                 logger.LogError(ex, "Error processing outbox message {Id}", message.Id);
             }
         }
-
-        await dbContext.SaveChangesAsync(context.CancellationToken);
     }
 }

@@ -12,13 +12,13 @@ public class InvoiceTests
 
         var invoice = Invoice.Create(orderId, paymentId, "john@example.com", 1999.98m);
 
-        invoice.Id.Should().NotBeEmpty();
+        invoice.Id.Should().NotBe(Guid.Empty);
         invoice.OrderId.Should().Be(orderId);
         invoice.PaymentId.Should().Be(paymentId);
         invoice.CustomerEmail.Should().Be("john@example.com");
         invoice.Amount.Should().Be(1999.98m);
         invoice.InvoiceNumber.Should().StartWith("INV-");
-        invoice.IssuedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+        (DateTime.UtcNow - invoice.IssuedAt).TotalSeconds.Should().BeLessThan(5);
     }
 
     [Fact]

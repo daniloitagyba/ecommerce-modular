@@ -12,7 +12,7 @@ public class EntityTests
     {
         var entity = new TestEntity();
 
-        entity.Id.Should().NotBeEmpty();
+        entity.Id.Should().NotBe(Guid.Empty);
     }
 
     [Fact]
@@ -23,7 +23,8 @@ public class EntityTests
 
         entity.AddDomainEvent(evt);
 
-        entity.DomainEvents.Should().ContainSingle().Which.Should().Be(evt);
+        entity.DomainEvents.Should().ContainSingle()
+            .Which.Should().Be(evt);
     }
 
     [Fact]

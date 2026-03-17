@@ -3,9 +3,10 @@ using ECommerce.Tests.Integration.Fixtures;
 
 namespace ECommerce.Tests.Integration.Ordering;
 
-public class OutboxIntegrationTests : IDisposable
+[Collection("Postgres")]
+public class OutboxIntegrationTests(PostgresContainerFixture postgres) : IAsyncLifetime
 {
-    private readonly DbContextFactory _factory = new();
+    private readonly DbContextFactory _factory = new(postgres.ConnectionString);
 
     [Fact]
     public async Task SaveChangesAsync_ShouldConvertIntegrationEventsToOutboxMessages()
@@ -76,5 +77,6 @@ public class OutboxIntegrationTests : IDisposable
         message.Content.Should().Contain("190");
     }
 
-    public void Dispose() => _factory.Dispose();
+    public Task InitializeAsync() => Task.CompletedTask;
+    public async Task DisposeAsync() => await _factory.DisposeAsync();
 }

@@ -5,41 +5,50 @@ using MediatR;
 
 namespace ECommerce.Modules.Ordering.Application.Commands;
 
-public sealed record PlaceOrderCommand(string CustomerEmail, List<OrderItemDto> Lines) : IRequest<Result<Guid>>;
+public sealed record PlaceOrderCommand(string CustomerEmail, List<OrderItemRequest> Items) : IRequest<Result<Guid>>;
 
-public sealed record OrderItemDto(Guid ProductId, string ProductName, decimal UnitPrice, int Quantity);
+public sealed record OrderItemRequest(Guid ProductId, int Quantity);
 
 public sealed class PlaceOrderValidator : AbstractValidator<PlaceOrderCommand>
 {
     public PlaceOrderValidator()
     {
         RuleFor(x => x.CustomerEmail).NotEmpty().EmailAddress();
-        RuleFor(x => x.Lines).NotEmpty().WithMessage("Order must have at least one item.");
-        RuleForEach(x => x.Lines).ChildRules(line =>
+        RuleFor(x => x.Items).NotEmpty().WithMessage("Order must have at least one item.");
+        RuleForEach(x => x.Items).ChildRules(item =>
         {
-            line.RuleFor(l => l.ProductId).NotEmpty();
-            line.RuleFor(l => l.ProductName).NotEmpty();
-            line.RuleFor(l => l.UnitPrice).GreaterThan(0);
-            line.RuleFor(l => l.Quantity).GreaterThan(0);
+            item.RuleFor(l => l.ProductId).NotEmpty();
+            item.RuleFor(l => l.Quantity).GreaterThan(0);
         });
     }
 }
 
-public sealed class PlaceOrderHandler(IOrderRepository repository, IOrderingUnitOfWork unitOfWork)
+public sealed class PlaceOrderHandler(
+    IOrderRepository repository,
+    IOrderingUnitOfWork unitOfWork,
+    IProductChecker productChecker)
     : IRequestHandler<PlaceOrderCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(PlaceOrderCommand request, CancellationToken ct)
     {
-        var lines = request.Lines.Select(l =>
-            OrderItem.Create(l.ProductId, l.ProductName, l.UnitPrice, l.Quantity));
+        var productItems = request.Items
+            .Select(l => new ProductLineRequest(l.ProductId, l.Quantity))
+            .ToList();
 
-        var result = Order.Create(request.CustomerEmail, lines);
+        var validation = await productChecker.ValidateProductsAsync(productItems, ct);
+        if (validation.IsFailure)
+            return Result<Guid>.Failure(validation.Error);
+
+        var items = validation.Value
+            .Select(v => OrderItem.Create(v.ProductId, v.ProductName, v.UnitPrice, v.Quantity));
+
+        var result = Order.Create(request.CustomerEmail, items);
         if (result.IsFailure)
             return Result<Guid>.Failure(result.Error);
 
-        repository.Add(result.Value!);
+        repository.Add(result.Value);
         await unitOfWork.SaveChangesAsync(ct);
 
-        return Result<Guid>.Success(result.Value!.Id);
+        return Result<Guid>.Success(result.Value.Id);
     }
 }

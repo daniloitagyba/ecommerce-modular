@@ -5,9 +5,10 @@ using ECommerce.Tests.Integration.Fixtures;
 
 namespace ECommerce.Tests.Integration.Catalog;
 
-public class GetProductsHandlerTests : IDisposable
+[Collection("Postgres")]
+public class GetProductsHandlerTests(PostgresContainerFixture postgres) : IAsyncLifetime
 {
-    private readonly DbContextFactory _factory = new();
+    private readonly DbContextFactory _factory = new(postgres.ConnectionString);
 
     [Fact]
     public async Task Handle_ShouldReturnAllProducts()
@@ -25,7 +26,7 @@ public class GetProductsHandlerTests : IDisposable
 
         var result = await handler.Handle(new GetProductsQuery(new PagedRequest()), CancellationToken.None);
 
-        result.Items.Should().HaveCount(2);
+        result.Items.Count.Should().Be(2);
         result.TotalCount.Should().Be(2);
         result.Items.Should().Contain(p => p.Name == "Laptop" && p.CategoryName == "Electronics");
         result.Items.Should().Contain(p => p.Name == "Mouse");
@@ -78,5 +79,6 @@ public class GetProductsHandlerTests : IDisposable
         result.Error.Code.Should().Be("Product.NotFound");
     }
 
-    public void Dispose() => _factory.Dispose();
+    public Task InitializeAsync() => Task.CompletedTask;
+    public async Task DisposeAsync() => await _factory.DisposeAsync();
 }

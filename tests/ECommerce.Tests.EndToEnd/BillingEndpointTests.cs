@@ -1,8 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using ECommerce.API.BackgroundJobs;
+using ECommerce.Modules.Catalog.Infrastructure;
 using ECommerce.Modules.Ordering.Infrastructure;
 using MassTransit;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Quartz;
@@ -12,6 +14,29 @@ namespace ECommerce.Tests.EndToEnd;
 public class BillingEndpointTests(ECommerceWebAppFactory factory) : IClassFixture<ECommerceWebAppFactory>
 {
     private readonly HttpClient _client = factory.CreateClient();
+
+    private async Task<Guid> EnsureProductExistsAsync(string name = "Keyboard", decimal price = 150.0m, int stock = 100)
+    {
+        using var scope = factory.Services.CreateScope();
+        var catalogDb = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
+        var product = await catalogDb.Products.FirstOrDefaultAsync(p => p.Name == name);
+        if (product is not null)
+            return product.Id;
+
+        var category = await catalogDb.Categories.FirstOrDefaultAsync()
+            ?? ECommerce.Modules.Catalog.Domain.Category.Create("Billing Test", "Test").Value;
+        if (!await catalogDb.Categories.AnyAsync())
+        {
+            catalogDb.Categories.Add(category);
+            await catalogDb.SaveChangesAsync();
+        }
+
+        var newProduct = ECommerce.Modules.Catalog.Domain.Product.Create(
+            name, $"BIL-{Guid.NewGuid():N}"[..20], price, stock, category.Id).Value;
+        catalogDb.Products.Add(newProduct);
+        await catalogDb.SaveChangesAsync();
+        return newProduct.Id;
+    }
 
     [Fact]
     public async Task GetPayments_ShouldReturnEmpty_WhenNoOrder()
@@ -36,14 +61,17 @@ public class BillingEndpointTests(ECommerceWebAppFactory factory) : IClassFixtur
     [Fact]
     public async Task PlaceOrder_ShouldAsyncCreatePaymentAndInvoice()
     {
+        var productId = await EnsureProductExistsAsync("Keyboard", 150.0m, 100);
+
         var orderResponse = await _client.PostAsJsonAsync("/api/orders", new
         {
             customerEmail = "billing@test.com",
-            lines = new[]
+            items = new[]
             {
-                new { productId = Guid.NewGuid(), productName = "Keyboard", unitPrice = 150.0, quantity = 2 }
+                new { productId, quantity = 2 }
             }
         });
+        orderResponse.StatusCode.Should().Be(HttpStatusCode.Created);
         var orderBody = await orderResponse.Content.ReadFromJsonAsync<IdResponse>();
         var orderId = orderBody!.Id;
 
@@ -85,9 +113,9 @@ public class BillingEndpointTests(ECommerceWebAppFactory factory) : IClassFixtur
         var orderResponse = await _client.PostAsJsonAsync("/api/orders", new
         {
             customerEmail = "fullflow@test.com",
-            lines = new[]
+            items = new[]
             {
-                new { productId = prodBody!.Id, productName = "Monitor", unitPrice = 500.0, quantity = 2 }
+                new { productId = prodBody!.Id, quantity = 2 }
             }
         });
         orderResponse.StatusCode.Should().Be(HttpStatusCode.Created);

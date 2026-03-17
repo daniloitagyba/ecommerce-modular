@@ -10,16 +10,18 @@ using Quartz;
 
 namespace ECommerce.Tests.Integration.BackgroundJobs;
 
-public class ProcessOutboxJobTests : IDisposable
+[Collection("Postgres")]
+public class ProcessOutboxJobTests(PostgresContainerFixture postgres) : IAsyncLifetime
 {
-    private readonly DbContextFactory _factory = new();
+    private readonly DbContextFactory _factory = new(postgres.ConnectionString);
     private readonly IBus _bus = Substitute.For<IBus>();
     private readonly ILogger<ProcessOutboxJob> _logger = Substitute.For<ILogger<ProcessOutboxJob>>();
     private readonly IJobExecutionContext _jobContext = Substitute.For<IJobExecutionContext>();
 
-    public ProcessOutboxJobTests()
+    public Task InitializeAsync()
     {
         _jobContext.CancellationToken.Returns(CancellationToken.None);
+        return Task.CompletedTask;
     }
 
     [Fact]
@@ -34,7 +36,6 @@ public class ProcessOutboxJobTests : IDisposable
             Type = typeof(OrderCreatedIntegrationEvent).AssemblyQualifiedName!,
             Content = JsonSerializer.Serialize(evt)
         });
-        await db.Database.EnsureCreatedAsync();
         await SaveWithoutDomainEvents(db);
 
         var job = new ProcessOutboxJob(db, _bus, _logger);
@@ -54,7 +55,6 @@ public class ProcessOutboxJobTests : IDisposable
     public async Task Execute_ShouldDoNothing_WhenNoUnprocessedMessages()
     {
         await using var db = _factory.CreateOrderingContext();
-        await db.Database.EnsureCreatedAsync();
 
         var job = new ProcessOutboxJob(db, _bus, _logger);
         await job.Execute(_jobContext);
@@ -77,7 +77,6 @@ public class ProcessOutboxJobTests : IDisposable
             Content = JsonSerializer.Serialize(evt),
             ProcessedAt = DateTime.UtcNow.AddMinutes(-5)
         });
-        await db.Database.EnsureCreatedAsync();
         await SaveWithoutDomainEvents(db);
 
         var job = new ProcessOutboxJob(db, _bus, _logger);
@@ -99,7 +98,6 @@ public class ProcessOutboxJobTests : IDisposable
             Type = "Some.NonExistent.Type, FakeAssembly",
             Content = "{}"
         });
-        await db.Database.EnsureCreatedAsync();
         await SaveWithoutDomainEvents(db);
 
         var job = new ProcessOutboxJob(db, _bus, _logger);
@@ -124,7 +122,6 @@ public class ProcessOutboxJobTests : IDisposable
             Type = typeof(OrderCreatedIntegrationEvent).AssemblyQualifiedName!,
             Content = "{ invalid json !!!"
         });
-        await db.Database.EnsureCreatedAsync();
         await SaveWithoutDomainEvents(db);
 
         var job = new ProcessOutboxJob(db, _bus, _logger);
@@ -140,7 +137,6 @@ public class ProcessOutboxJobTests : IDisposable
     public async Task Execute_ShouldProcessMultipleMessages_InOrder()
     {
         await using var db = _factory.CreateOrderingContext();
-        await db.Database.EnsureCreatedAsync();
 
         for (var i = 1; i <= 3; i++)
         {
@@ -170,7 +166,6 @@ public class ProcessOutboxJobTests : IDisposable
     public async Task Execute_ShouldContinueProcessing_WhenOneMessageFails()
     {
         await using var db = _factory.CreateOrderingContext();
-        await db.Database.EnsureCreatedAsync();
 
         // First message — valid
         var valid = new OrderCreatedIntegrationEvent(Guid.NewGuid(), "ok@test.com", 200m);
@@ -235,5 +230,5 @@ public class ProcessOutboxJobTests : IDisposable
         await db.SaveChangesAsync();
     }
 
-    public void Dispose() => _factory.Dispose();
+    public async Task DisposeAsync() => await _factory.DisposeAsync();
 }

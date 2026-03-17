@@ -12,7 +12,7 @@ public class PlaceOrderValidatorTests
     {
         var command = new PlaceOrderCommand("john@example.com",
         [
-            new OrderItemDto(Guid.NewGuid(), "Laptop", 999.99m, 1)
+            new OrderItemRequest(Guid.NewGuid(), 1)
         ]);
 
         _validator.TestValidate(command).ShouldNotHaveAnyValidationErrors();
@@ -23,7 +23,7 @@ public class PlaceOrderValidatorTests
     {
         var command = new PlaceOrderCommand("",
         [
-            new OrderItemDto(Guid.NewGuid(), "Laptop", 999.99m, 1)
+            new OrderItemRequest(Guid.NewGuid(), 1)
         ]);
 
         _validator.TestValidate(command).ShouldHaveValidationErrorFor(x => x.CustomerEmail);
@@ -34,26 +34,26 @@ public class PlaceOrderValidatorTests
     {
         var command = new PlaceOrderCommand("not-an-email",
         [
-            new OrderItemDto(Guid.NewGuid(), "Laptop", 999.99m, 1)
+            new OrderItemRequest(Guid.NewGuid(), 1)
         ]);
 
         _validator.TestValidate(command).ShouldHaveValidationErrorFor(x => x.CustomerEmail);
     }
 
     [Fact]
-    public void ShouldFail_WhenLinesAreEmpty()
+    public void ShouldFail_WhenItemsAreEmpty()
     {
         var command = new PlaceOrderCommand("john@example.com", []);
 
-        _validator.TestValidate(command).ShouldHaveValidationErrorFor(x => x.Lines);
+        _validator.TestValidate(command).ShouldHaveValidationErrorFor(x => x.Items);
     }
 
     [Fact]
-    public void ShouldFail_WhenLineProductIdIsEmpty()
+    public void ShouldFail_WhenItemProductIdIsEmpty()
     {
         var command = new PlaceOrderCommand("john@example.com",
         [
-            new OrderItemDto(Guid.Empty, "Laptop", 999.99m, 1)
+            new OrderItemRequest(Guid.Empty, 1)
         ]);
 
         var result = _validator.TestValidate(command);
@@ -61,23 +61,11 @@ public class PlaceOrderValidatorTests
     }
 
     [Fact]
-    public void ShouldFail_WhenLineQuantityIsZero()
+    public void ShouldFail_WhenItemQuantityIsZero()
     {
         var command = new PlaceOrderCommand("john@example.com",
         [
-            new OrderItemDto(Guid.NewGuid(), "Laptop", 999.99m, 0)
-        ]);
-
-        var result = _validator.TestValidate(command);
-        result.ShouldHaveAnyValidationError();
-    }
-
-    [Fact]
-    public void ShouldFail_WhenLinePriceIsZero()
-    {
-        var command = new PlaceOrderCommand("john@example.com",
-        [
-            new OrderItemDto(Guid.NewGuid(), "Laptop", 0m, 1)
+            new OrderItemRequest(Guid.NewGuid(), 0)
         ]);
 
         var result = _validator.TestValidate(command);

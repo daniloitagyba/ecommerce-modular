@@ -11,7 +11,7 @@ public sealed class GetOrderByIdHandler(IOrderRepository repository)
 {
     public async Task<Result<OrderDto>> Handle(GetOrderByIdQuery request, CancellationToken ct)
     {
-        var order = await repository.GetByIdWithLinesAsync(request.Id, ct);
+        var order = await repository.GetByIdWithItemsAsync(request.Id, ct);
         if (order is null)
             return Result<OrderDto>.Failure(OrderErrors.NotFound);
 
@@ -20,6 +20,7 @@ public sealed class GetOrderByIdHandler(IOrderRepository repository)
             order.CustomerEmail,
             order.Status.ToString(),
             order.CreatedAt,
-            order.Lines.Select(l => new OrderItemResponseDto(l.ProductId, l.ProductName, l.UnitPrice, l.Quantity)).ToList()));
+            order.TotalAmount,
+            order.Items.Select(l => new OrderItemResponseDto(l.ProductId, l.ProductName, l.UnitPrice, l.Quantity)).ToList()));
     }
 }

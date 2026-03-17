@@ -4,9 +4,10 @@ using ECommerce.Tests.Integration.Fixtures;
 
 namespace ECommerce.Tests.Integration.Catalog;
 
-public class CreateProductHandlerTests : IDisposable
+[Collection("Postgres")]
+public class CreateProductHandlerTests(PostgresContainerFixture postgres) : IAsyncLifetime
 {
-    private readonly DbContextFactory _factory = new();
+    private readonly DbContextFactory _factory = new(postgres.ConnectionString);
 
     [Fact]
     public async Task Handle_ShouldCreateProductInDatabase()
@@ -25,7 +26,7 @@ public class CreateProductHandlerTests : IDisposable
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Should().NotBeEmpty();
+        result.Value.Should().NotBe(Guid.Empty);
         var product = await db.Products.FindAsync(result.Value);
         product.Should().NotBeNull();
         product!.Name.Should().Be("Laptop");
@@ -34,5 +35,6 @@ public class CreateProductHandlerTests : IDisposable
         product.StockQuantity.Should().Be(50);
     }
 
-    public void Dispose() => _factory.Dispose();
+    public Task InitializeAsync() => Task.CompletedTask;
+    public async Task DisposeAsync() => await _factory.DisposeAsync();
 }

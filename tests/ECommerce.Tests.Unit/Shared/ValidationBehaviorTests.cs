@@ -49,9 +49,9 @@ public class ValidationBehaviorTests
         var behavior = new ValidationBehavior<TestVbRequest, string>([new FailingValidator()]);
         var request = new TestVbRequest("");
 
-        var act = () => behavior.Handle(request, ct => Task.FromResult("ok"), CancellationToken.None);
+        Func<Task> act = () => behavior.Handle(request, ct => Task.FromResult("ok"), CancellationToken.None);
 
-        await act.Should().ThrowAsync<ValidationException>()
-            .Where(ex => ex.Errors.Any(e => e.PropertyName == "Name"));
+        var ex = await act.Should().ThrowAsync<ValidationException>();
+        ex.Which.Errors.Should().Contain(e => e.PropertyName == "Name");
     }
 }

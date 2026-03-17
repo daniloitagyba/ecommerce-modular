@@ -1,4 +1,3 @@
-using System.Text.Json;
 using ECommerce.Modules.Ordering.Domain;
 using ECommerce.Shared.Domain;
 using ECommerce.Shared.Infrastructure;
@@ -23,8 +22,8 @@ public sealed class OrderingDbContext(DbContextOptions<OrderingDbContext> option
             b.HasKey(o => o.Id);
             b.Property(o => o.CustomerEmail).HasMaxLength(200).IsRequired();
             b.Property(o => o.Status).HasConversion<string>().HasMaxLength(50);
-            b.HasMany(o => o.Lines).WithOne().HasForeignKey(l => l.OrderId);
-            b.Ignore(o => o.TotalAmount);
+            b.HasMany(o => o.Items).WithOne().HasForeignKey(l => l.OrderId);
+            b.Property(o => o.TotalAmount).HasPrecision(18, 2);
         });
 
         modelBuilder.Entity<OrderItem>(b =>
@@ -41,37 +40,14 @@ public sealed class OrderingDbContext(DbContextOptions<OrderingDbContext> option
             b.HasKey(o => o.Id);
             b.Property(o => o.Type).HasMaxLength(500).IsRequired();
             b.Property(o => o.Content).IsRequired();
-            b.HasIndex(o => o.ProcessedAt);
+            b.HasIndex(o => new { o.ProcessedAt, o.CreatedAt });
         });
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        ConvertIntegrationEventsToOutboxMessages();
         var result = await base.SaveChangesAsync(cancellationToken);
         await this.DispatchDomainEventsAsync(publisher, cancellationToken);
         return result;
-    }
-
-    private void ConvertIntegrationEventsToOutboxMessages()
-    {
-        var entities = ChangeTracker
-            .Entries<Entity>()
-            .Where(e => e.Entity.DomainEvents.Any(d => d is IIntegrationEvent))
-            .Select(e => e.Entity)
-            .ToList();
-
-        foreach (var entity in entities)
-        {
-            var integrationEvents = entity.DomainEvents.OfType<IIntegrationEvent>().ToList();
-            foreach (var evt in integrationEvents)
-            {
-                OutboxMessages.Add(new OutboxMessage
-                {
-                    Type = evt.GetType().AssemblyQualifiedName!,
-                    Content = JsonSerializer.Serialize(evt, evt.GetType())
-                });
-            }
-        }
     }
 }

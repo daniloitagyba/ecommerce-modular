@@ -1,3 +1,4 @@
+using ECommerce.Modules.Catalog.Application.Services;
 using ECommerce.Modules.Catalog.Domain;
 using ECommerce.Modules.Catalog.Endpoints;
 using ECommerce.Modules.Catalog.Infrastructure;
@@ -16,6 +17,7 @@ public static class CatalogModule
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<ICategoryRepository, CategoryRepository>();
         services.AddScoped<ICatalogUnitOfWork>(sp => sp.GetRequiredService<CatalogDbContext>());
+        services.AddScoped<IProductChecker, ProductChecker>();
 
         return services;
     }

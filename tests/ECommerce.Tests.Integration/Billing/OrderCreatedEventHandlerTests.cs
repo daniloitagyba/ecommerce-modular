@@ -8,9 +8,10 @@ using NSubstitute;
 
 namespace ECommerce.Tests.Integration.Billing;
 
-public class OrderCreatedConsumerTests : IDisposable
+[Collection("Postgres")]
+public class OrderCreatedConsumerTests(PostgresContainerFixture postgres) : IAsyncLifetime
 {
-    private readonly DbContextFactory _factory = new();
+    private readonly DbContextFactory _factory = new(postgres.ConnectionString);
 
     [Fact]
     public async Task Consume_ShouldCreatePaymentAndInvoice()
@@ -43,5 +44,32 @@ public class OrderCreatedConsumerTests : IDisposable
         invoice.PaymentId.Should().Be(payment.Id);
     }
 
-    public void Dispose() => _factory.Dispose();
+    [Fact]
+    public async Task Consume_ShouldBeIdempotent_WhenCalledTwice()
+    {
+        await using var db = _factory.CreateBillingContext();
+        var paymentRepo = _factory.CreatePaymentRepository(db);
+        var invoiceRepo = _factory.CreateInvoiceRepository(db);
+
+        var logger = Substitute.For<ILogger<OrderCreatedConsumer>>();
+        var consumer = new OrderCreatedConsumer(paymentRepo, invoiceRepo, db, logger);
+
+        var orderId = Guid.NewGuid();
+        var evt = new OrderCreatedIntegrationEvent(orderId, "john@example.com", 500m);
+        var consumeContext = Substitute.For<ConsumeContext<OrderCreatedIntegrationEvent>>();
+        consumeContext.Message.Returns(evt);
+        consumeContext.CancellationToken.Returns(CancellationToken.None);
+
+        await consumer.Consume(consumeContext);
+        await consumer.Consume(consumeContext);
+
+        var payments = await db.Payments.Where(p => p.OrderId == orderId).ToListAsync();
+        payments.Should().HaveCount(1);
+
+        var invoices = await db.Invoices.Where(i => i.OrderId == orderId).ToListAsync();
+        invoices.Should().HaveCount(1);
+    }
+
+    public Task InitializeAsync() => Task.CompletedTask;
+    public async Task DisposeAsync() => await _factory.DisposeAsync();
 }

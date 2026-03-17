@@ -12,7 +12,12 @@ public static class OrderingModule
 {
     public static IServiceCollection AddOrderingModule(this IServiceCollection services, Action<DbContextOptionsBuilder> configureDb)
     {
-        services.AddDbContext<OrderingDbContext>(configureDb);
+        services.AddSingleton<OutboxInterceptor>();
+        services.AddDbContext<OrderingDbContext>((sp, options) =>
+        {
+            configureDb(options);
+            options.AddInterceptors(sp.GetRequiredService<OutboxInterceptor>());
+        });
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddScoped<IOrderingUnitOfWork>(sp => sp.GetRequiredService<OrderingDbContext>());
 

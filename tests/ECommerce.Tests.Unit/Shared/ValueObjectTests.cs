@@ -122,7 +122,6 @@ public class MoneyTests
         var eur = Money.Create(50m, "EUR").Value!;
 
         var act = () => usd.Add(eur);
-
         act.Should().Throw<InvalidOperationException>();
     }
 

@@ -13,6 +13,7 @@ public sealed class GetProductsHandler(IProductRepository repository)
 {
     public async Task<PagedResult<ProductDto>> Handle(GetProductsQuery request, CancellationToken ct) =>
         await repository.QueryWithCategory()
+            .OrderBy(p => p.Name)
             .Select(p => new ProductDto(p.Id, p.Name, p.Sku, p.Price, p.StockQuantity, p.Category.Name))
             .ToPagedResultAsync(request.Paging, ct);
 }

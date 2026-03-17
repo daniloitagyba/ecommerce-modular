@@ -4,9 +4,10 @@ using ECommerce.Tests.Integration.Fixtures;
 
 namespace ECommerce.Tests.Integration.Catalog;
 
-public class UpdateStockHandlerTests : IDisposable
+[Collection("Postgres")]
+public class UpdateStockHandlerTests(PostgresContainerFixture postgres) : IAsyncLifetime
 {
-    private readonly DbContextFactory _factory = new();
+    private readonly DbContextFactory _factory = new(postgres.ConnectionString);
 
     [Fact]
     public async Task Handle_ShouldIncreaseStock()
@@ -83,5 +84,6 @@ public class UpdateStockHandlerTests : IDisposable
         result.Error.Code.Should().Be("Product.InsufficientStock");
     }
 
-    public void Dispose() => _factory.Dispose();
+    public Task InitializeAsync() => Task.CompletedTask;
+    public async Task DisposeAsync() => await _factory.DisposeAsync();
 }

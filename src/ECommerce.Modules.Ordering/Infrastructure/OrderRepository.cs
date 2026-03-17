@@ -6,8 +6,8 @@ namespace ECommerce.Modules.Ordering.Infrastructure;
 
 public sealed class OrderRepository(OrderingDbContext context) : Repository<Order>(context), IOrderRepository
 {
-    public async Task<Order?> GetByIdWithLinesAsync(Guid id, CancellationToken ct = default) =>
-        await DbSet.Include(o => o.Lines).FirstOrDefaultAsync(o => o.Id == id, ct);
+    public async Task<Order?> GetByIdWithItemsAsync(Guid id, CancellationToken ct = default) =>
+        await DbSet.Include(o => o.Items).FirstOrDefaultAsync(o => o.Id == id, ct);
 
-    public IQueryable<Order> QueryWithLines() => DbSet.Include(o => o.Lines);
+    public IQueryable<Order> QueryWithItems() => DbSet.Include(o => o.Items);
 }

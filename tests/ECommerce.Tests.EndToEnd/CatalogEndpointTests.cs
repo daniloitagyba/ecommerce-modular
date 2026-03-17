@@ -26,7 +26,7 @@ public class CatalogEndpointTests(ECommerceWebAppFactory factory) : IClassFixtur
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
         var body = await response.Content.ReadFromJsonAsync<IdResponse>();
-        body!.Id.Should().NotBeEmpty();
+        body!.Id.Should().NotBe(Guid.Empty);
     }
 
     [Fact]
@@ -42,7 +42,7 @@ public class CatalogEndpointTests(ECommerceWebAppFactory factory) : IClassFixtur
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
         var body = await response.Content.ReadFromJsonAsync<IdResponse>();
-        body!.Id.Should().NotBeEmpty();
+        body!.Id.Should().NotBe(Guid.Empty);
     }
 
     [Fact]

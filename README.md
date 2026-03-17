@@ -154,7 +154,7 @@ curl -X POST http://localhost:5225/api/catalog/products \
 # Place an order
 curl -X POST http://localhost:5225/api/orders \
   -H "Content-Type: application/json" \
-  -d '{"customerEmail": "john@example.com", "lines": [{"productId": "<product-id>", "productName": "Laptop", "unitPrice": 999.99, "quantity": 1}]}'
+  -d '{"customerEmail": "john@example.com", "items": [{"productId": "<product-id>", "quantity": 1}]}'
 
 # Check payment was auto-created
 curl http://localhost:5225/api/billing/payments/<order-id>

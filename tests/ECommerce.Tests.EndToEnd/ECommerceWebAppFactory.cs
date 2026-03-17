@@ -3,24 +3,20 @@ using ECommerce.Modules.Catalog.Infrastructure;
 using ECommerce.Modules.Ordering.Infrastructure;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Testcontainers.PostgreSql;
 
 namespace ECommerce.Tests.EndToEnd;
 
 public class ECommerceWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private SqliteConnection _connection = null!;
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17-alpine")
+        .Build();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
-
         builder.UseEnvironment("Testing");
 
         // Override outbox interval to 1 second for fast E2E test feedback
@@ -28,7 +24,8 @@ public class ECommerceWebAppFactory : WebApplicationFactory<Program>, IAsyncLife
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Outbox:IntervalSeconds"] = "1"
+                ["Outbox:IntervalSeconds"] = "1",
+                ["ConnectionStrings:DefaultConnection"] = _container.GetConnectionString()
             });
         });
 
@@ -49,33 +46,28 @@ public class ECommerceWebAppFactory : WebApplicationFactory<Program>, IAsyncLife
             foreach (var descriptor in descriptorsToRemove)
                 services.Remove(descriptor);
 
-            // Re-register with shared in-memory SQLite
-            services.AddDbContext<CatalogDbContext>(o => o.UseSqlite(_connection));
-            services.AddDbContext<OrderingDbContext>(o => o.UseSqlite(_connection));
-            services.AddDbContext<BillingDbContext>(o => o.UseSqlite(_connection));
+            var connStr = _container.GetConnectionString();
+            services.AddDbContext<CatalogDbContext>(o => o.UseNpgsql(connStr));
+            services.AddDbContext<OrderingDbContext>(o =>
+            {
+                o.UseNpgsql(connStr);
+                o.AddInterceptors(new OutboxInterceptor());
+            });
+            services.AddDbContext<BillingDbContext>(o => o.UseNpgsql(connStr));
         });
     }
 
     public async Task InitializeAsync()
     {
-        using var scope = Services.CreateScope();
-        var services = scope.ServiceProvider;
+        await _container.StartAsync();
 
-        var catalogCtx = services.GetRequiredService<CatalogDbContext>();
-        await catalogCtx.Database.EnsureCreatedAsync();
-
-        var orderingCtx = services.GetRequiredService<OrderingDbContext>();
-        var orderingCreator = orderingCtx.GetService<IRelationalDatabaseCreator>();
-        try { await orderingCreator.CreateTablesAsync(); } catch { }
-
-        var billingCtx = services.GetRequiredService<BillingDbContext>();
-        var billingCreator = billingCtx.GetService<IRelationalDatabaseCreator>();
-        try { await billingCreator.CreateTablesAsync(); } catch { }
+        // Force app startup so tables are created via DatabaseInitializer
+        _ = Services;
     }
 
     async Task IAsyncLifetime.DisposeAsync()
     {
-        _connection?.Dispose();
         await base.DisposeAsync();
+        await _container.DisposeAsync();
     }
 }

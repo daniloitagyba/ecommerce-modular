@@ -9,31 +9,45 @@ namespace ECommerce.API;
 
 public static class DatabaseInitializer
 {
+    private static readonly string[] Schemas = ["catalog", "ordering", "billing"];
+
     public static async Task InitializeDatabaseAsync(this WebApplication app)
     {
         using var scope = app.Services.CreateScope();
         var services = scope.ServiceProvider;
 
-        // For SQLite with multiple DbContexts sharing one file,
-        // we use RelationalDatabaseCreator to create tables for each context.
-        await EnsureTablesCreatedAsync(services.GetRequiredService<CatalogDbContext>());
-        await EnsureTablesCreatedAsync(services.GetRequiredService<OrderingDbContext>());
-        await EnsureTablesCreatedAsync(services.GetRequiredService<BillingDbContext>());
+        var catalogCtx = services.GetRequiredService<CatalogDbContext>();
+        var databaseCreator = catalogCtx.GetService<IRelationalDatabaseCreator>();
+
+        if (!await databaseCreator.ExistsAsync())
+            await databaseCreator.CreateAsync();
+
+        // Drop and recreate all module schemas so that table definitions
+        // always match the current EF model. This is safe for development
+        // because seed data is re-created on every startup.
+        await DropSchemasAsync(catalogCtx);
+
+        // Multiple DbContexts share the same PostgreSQL database.
+        // We use RelationalDatabaseCreator to create tables for each context.
+        await CreateTablesAsync(services.GetRequiredService<CatalogDbContext>());
+        await CreateTablesAsync(services.GetRequiredService<OrderingDbContext>());
+        await CreateTablesAsync(services.GetRequiredService<BillingDbContext>());
     }
 
-    private static async Task EnsureTablesCreatedAsync(DbContext context)
+    #pragma warning disable EF1003 // Schema names are hard-coded constants, not user input
+    private static async Task DropSchemasAsync(DbContext context)
     {
-        var databaseCreator = context.GetService<IRelationalDatabaseCreator>();
-        await databaseCreator.EnsureCreatedAsync();
+        foreach (var schema in Schemas)
+        {
+            await context.Database.ExecuteSqlRawAsync(
+                "DROP SCHEMA IF EXISTS \"" + schema + "\" CASCADE");
+        }
+    }
+    #pragma warning restore EF1003
 
-        // CreateTables will throw if tables already exist, so we catch and ignore
-        try
-        {
-            await databaseCreator.CreateTablesAsync();
-        }
-        catch (Exception)
-        {
-            // Tables already exist — expected for subsequent contexts sharing the same DB file
-        }
+    private static async Task CreateTablesAsync(DbContext context)
+    {
+        var creator = context.GetService<IRelationalDatabaseCreator>();
+        await creator.CreateTablesAsync();
     }
 }

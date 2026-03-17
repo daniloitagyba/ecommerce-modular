@@ -11,7 +11,7 @@ public class PaymentTests
 
         var payment = Payment.Create(orderId, 1999.98m);
 
-        payment.Id.Should().NotBeEmpty();
+        payment.Id.Should().NotBe(Guid.Empty);
         payment.OrderId.Should().Be(orderId);
         payment.Amount.Should().Be(1999.98m);
         payment.Status.Should().Be(PaymentStatus.Pending);
@@ -27,7 +27,7 @@ public class PaymentTests
 
         payment.Status.Should().Be(PaymentStatus.Completed);
         payment.CompletedAt.Should().NotBeNull();
-        payment.CompletedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+        (DateTime.UtcNow - payment.CompletedAt!.Value).TotalSeconds.Should().BeLessThan(5);
     }
 
     [Fact]
